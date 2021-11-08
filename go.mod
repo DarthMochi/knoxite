@@ -47,4 +47,6 @@ require (
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	google.golang.org/api v0.62.0
 	gopkg.in/kothar/go-backblaze.v0 v0.0.0-20210124194846-35409b867216
+	gorm.io/driver/sqlite v1.2.3
+	gorm.io/gorm v1.22.2
 )
