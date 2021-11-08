@@ -46,4 +46,6 @@ require (
 	google.golang.org/api v0.44.0
 	gopkg.in/ini.v1 v1.51.1 // indirect
 	gopkg.in/kothar/go-backblaze.v0 v0.0.0-20210124194846-35409b867216
+	gorm.io/driver/sqlite v1.2.3
+	gorm.io/gorm v1.22.2
 )

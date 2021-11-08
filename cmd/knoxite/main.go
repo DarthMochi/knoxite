@@ -57,8 +57,8 @@ var (
 		Short: "Knoxite is a data storage & backup tool",
 		Long: "Knoxite is a secure and flexible data storage and backup tool\n" +
 			"Complete documentation is available at https://github.com/knoxite/knoxite",
-		SilenceErrors: true,
-		SilenceUsage:  true,
+		SilenceErrors:     true,
+		SilenceUsage:      true,
 		DisableAutoGenTag: true,
 	}
 
