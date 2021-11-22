@@ -11,6 +11,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/go-ini/ini v1.51.1 // indirect
 	github.com/google/readahead v0.0.0-20161222183148-eaceba169032 // indirect
+	github.com/gorilla/mux v1.8.0
 	github.com/jlaffaye/ftp v0.0.0-20210307004419-5d4190119067
 	github.com/klauspost/compress v1.11.13
 	github.com/klauspost/reedsolomon v1.9.12
