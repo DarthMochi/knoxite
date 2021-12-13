@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,8 +37,9 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 		panic("failed in ParseForm()")
 	}
 	client := &Client{
-		Name:     r.PostFormValue("name"),
-		AuthCode: r.PostFormValue("authcode"),
+		Name: r.PostFormValue("name"),
+		// AuthCode: r.PostFormValue("authcode"),
+		AuthCode: generateToken(32),
 	}
 	a.DB.Create(client)
 
@@ -59,6 +62,9 @@ func (a *App) getAllClients(w http.ResponseWriter, r *http.Request) {
 	clientsJSON, _ := json.Marshal(clients)
 
 	w.WriteHeader(200)
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:8080")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(clientsJSON))
 }
 
@@ -97,6 +103,14 @@ func (a *App) deleteClient(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+func generateToken(length int) string {
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b)
+}
+
 var serveCmd = &cobra.Command{
 	Use: "serve",
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -108,10 +122,11 @@ var serveCmd = &cobra.Command{
 
 		router := mux.NewRouter()
 		router.HandleFunc("/clients", a.createClient).Methods("POST")
-		router.HandleFunc("/clients", a.getAllClients).Methods("GET")
+		router.HandleFunc("/clients", a.getAllClients).Methods("GET", "OPTIONS")
 		router.HandleFunc("/clients/{id}", a.getClient).Methods("GET")
 		router.HandleFunc("/clients/{id}", a.updateClient).Methods("PUT")
 		router.HandleFunc("/clients/{id}", a.deleteClient).Methods("DELETE")
+		router.HandleFunc("/test", a.test).Methods("GET")
 
 		fmt.Println("starting server")
 		/* http.HandleFunc("/test", test)
@@ -136,8 +151,26 @@ func init() {
 
 const storagePath = "/tmp/knoxite.storage"
 
-func test(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "URL is: %v", r.URL.Path)
+// curl -H "Authorization: Bearer 9b1610f4cb673feeee90fb9c8cfed2422caa6f6478dee79c3a54b72ffddae1f2" http://localhost:42024/test
+
+func (a *App) test(w http.ResponseWriter, r *http.Request) {
+	if client, err := a.authenticateClient(w, r); err != nil {
+		fmt.Errorf("error")
+	} else {
+		fmt.Fprintf(w, "Client name is: %s", client.Name)
+	}
+}
+
+func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Client, error) {
+	authToken := strings.Split(r.Header.Get("Authorization"), "Bearer ")[1]
+
+	client := &Client{}
+	if err := a.DB.First(client, Client{AuthCode: authToken}).Error; err != nil {
+		// respondError(w, http.StatusNotFound, err.Error())
+		w.WriteHeader(http.StatusNotFound)
+		return nil, fmt.Errorf(err.Error())
+	}
+	return client, nil
 }
 
 func authPath(w http.ResponseWriter, r *http.Request) (string, error) {
