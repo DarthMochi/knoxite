@@ -285,6 +285,9 @@ func (a *App) testUserAuth(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) authenticateUser(w http.ResponseWriter, r *http.Request) error {
 	u, p, ok := r.BasicAuth()
+	fmt.Printf("Username: %s\n", u)
+	fmt.Printf("Password: %s\n", p)
+
 	if !ok {
 		w.WriteHeader(http.StatusUnauthorized)
 		return fmt.Errorf("security alert: no auth set")
