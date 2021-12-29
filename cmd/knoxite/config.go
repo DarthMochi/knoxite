@@ -9,15 +9,16 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
 	"github.com/knoxite/knoxite"
+	"github.com/knoxite/knoxite/cmd/knoxite/action"
 	"github.com/knoxite/knoxite/cmd/knoxite/config"
 	"github.com/knoxite/knoxite/cmd/knoxite/utils"
 	"github.com/muesli/gotable"
 	"github.com/pelletier/go-toml"
+	"github.com/rsteube/carapace"
 	"github.com/spf13/cobra"
 )
 
@@ -100,6 +101,25 @@ func init() {
 	configCmd.AddCommand(configCatCmd)
 	configCmd.AddCommand(configConvertCmd)
 	RootCmd.AddCommand(configCmd)
+
+	carapace.Gen(configSetCmd).PositionalCompletion(
+		action.ActionConfigKeys(configSetCmd),
+		carapace.ActionCallback(func(c carapace.Context) carapace.Action {
+			if splitted := strings.Split(c.Args[0], "."); len(splitted) == 2 {
+				return action.ActionConfigValues(splitted[1])
+			}
+			return carapace.ActionValues()
+		}),
+	)
+
+	carapace.Gen(configAliasCmd).PositionalCompletion(
+		action.ActionAliases(configAliasCmd),
+	)
+
+	carapace.Gen(configConvertCmd).PositionalCompletion(
+		action.ActionRepo(),
+		action.ActionRepo(),
+	)
 }
 
 func executeConfigInit() error {
@@ -130,7 +150,7 @@ func executeConfigSet(option string, values []string) error {
 	// The first part should be the repos alias
 	repo, ok := cfg.Repositories[strings.ToLower(parts[0])]
 	if !ok {
-		return fmt.Errorf("No alias with name %s found", parts[0])
+		return fmt.Errorf("no alias with name %s found", parts[0])
 	}
 
 	opt := strings.ToLower(parts[1])
@@ -144,7 +164,7 @@ func executeConfigSet(option string, values []string) error {
 	case "tolerance":
 		tol, err := strconv.Atoi(values[0])
 		if err != nil {
-			return fmt.Errorf("Failed to convert %s to uint for the fault tolerance option: %v", opt, err)
+			return fmt.Errorf("failed to convert %s to uint for the fault tolerance option: %v", opt, err)
 		}
 		repo.Tolerance = uint(tol)
 	case "store_excludes":
@@ -159,7 +179,7 @@ func executeConfigSet(option string, values []string) error {
 		repo.Pedantic = b
 
 	default:
-		return fmt.Errorf("Unknown configuration option: %s", opt)
+		return fmt.Errorf("unknown configuration option: %s", opt)
 	}
 	cfg.Repositories[strings.ToLower(parts[0])] = repo
 

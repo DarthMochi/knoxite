@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 
 	shutdown "github.com/klauspost/shutdown2"
+	"github.com/rsteube/carapace"
 	"github.com/spf13/cobra"
 
 	"github.com/knoxite/knoxite"
+	"github.com/knoxite/knoxite/cmd/knoxite/action"
 )
 
 var (
@@ -22,8 +24,9 @@ var (
 
 	cloneCmd = &cobra.Command{
 		Use:   "clone [snapshot] [dir/file] [...]",
-		Short: "clone a snapshot",
-		Long:  `The clone command clones an existing snapshot and adds a file or directory`,
+		Short: "Add to a snapshot",
+		Long:  `Adds target file or directory to an existing snapshot`,
+
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				return fmt.Errorf("clone needs to know which snapshot to clone")
@@ -39,8 +42,16 @@ var (
 )
 
 func init() {
-	initStoreFlags(cloneCmd.Flags, &cloneOpts)
+	initStoreFlags(cloneCmd, &cloneOpts)
 	RootCmd.AddCommand(cloneCmd)
+
+	carapace.Gen(cloneCmd).PositionalCompletion(
+		action.ActionSnapshots(cloneCmd, ""),
+	)
+
+	carapace.Gen(cloneCmd).PositionalAnyCompletion(
+		carapace.ActionFiles(),
+	)
 }
 
 func executeClone(snapshotID string, args []string, opts StoreOptions) error {
