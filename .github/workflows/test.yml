@@ -22,6 +22,11 @@ jobs:
       - name: Download Go modules
         run: go mod download
 
+      - name: HTTP knoxite server Backend Tests
+        run: |
+          . ./admin/setup_http_test_environment.sh
+          go test -v -count=1 -tags "ci backend" -covermode atomic -coverprofile=knoxitehttp.cov ./storage/http
+
       - name: Storage Amazon S3 Backend Tests
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.KNOXITE_AMAZONS3NG_ACCESS_KEY_ID }}

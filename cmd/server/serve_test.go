@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	b64 "encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -18,12 +19,6 @@ import (
 )
 
 var (
-	/*username   = "abc"
-	password   = "123"
-	database   = "test.db"
-	repo       = "testdata/repositories/"
-	port       = "8080"
-	testConfig = "testdata/knoxite-server.config"*/
 	app       = &App{}
 	newClient = &Client{
 		Name: "Testclient",
@@ -43,7 +38,7 @@ func TestCreateClient(t *testing.T) {
 
 	app.DB.Find(&clients)
 
-	if len(clients) < 2 {
+	if len(clients) < 1 {
 		t.Errorf("Client was not created")
 	} else {
 		client := clients[len(clients)-1]
@@ -68,8 +63,8 @@ func TestCreateClient(t *testing.T) {
 		}
 
 		// TODO: should be http.StatusCreated
-		if responseRecorder.Result().StatusCode != http.StatusOK {
-			t.Errorf("Want status '%d', got '%d'", http.StatusCreated, responseRecorder.Code)
+		if responseRecorder.Code != http.StatusOK {
+			t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Result().StatusCode)
 		}
 	}
 }
@@ -93,7 +88,7 @@ func TestUpload(t *testing.T) {
 
 func TestDownload(t *testing.T) {
 	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	// defer cleanup(testDatabase, testStorage, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -102,12 +97,95 @@ func TestDownload(t *testing.T) {
 	createClient(t)
 	uploadTestFileRequest(t, testfile)
 
-	request := httptest.NewRequest(http.MethodGet, "/download/", strings.NewReader(testfile))
+	request := httptest.NewRequest(http.MethodGet, "/download/chunks/test.db", nil)
 	responseRecorder := httptest.NewRecorder()
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
 	app.download(responseRecorder, request)
 
 	if responseRecorder.Code != http.StatusOK {
 		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
+	}
+}
+
+func TestStat(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+	uploadTestFileRequest(t, testDatabase)
+
+	request := httptest.NewRequest(http.MethodGet, "/size/chunks/", strings.NewReader(testDatabase))
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder := httptest.NewRecorder()
+	app.getFileStats(responseRecorder, request)
+
+	var file struct {
+		Path string
+		Size int64
+	}
+	json.NewDecoder(responseRecorder.Result().Body).Decode(&file)
+
+	if file.Size < 1 {
+		t.Errorf("Want size bigger than 1, got '%d'", file.Size)
+	}
+}
+
+func TestMkdir(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	request := httptest.NewRequest(http.MethodGet, "/mkdir/chunks/1234", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder := httptest.NewRecorder()
+	app.mkdir(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusCreated {
+		t.Errorf("Want status '%d', got '%d'", http.StatusCreated, responseRecorder.Code)
+	}
+}
+
+func TestDeleteFile(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+	uploadTestFileRequest(t, testDatabase)
+
+	request := httptest.NewRequest(http.MethodDelete, "/delete/chunks/test.db", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder := httptest.NewRecorder()
+	app.delete(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusOK {
+		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
+	}
+}
+
+func TestDeleteFilePathTraversal(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+	uploadTestFileRequest(t, testDatabase)
+
+	request := httptest.NewRequest(http.MethodDelete, "/delete/chunks/../../../../../../../../../../../chunks/test.db", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder := httptest.NewRecorder()
+	app.delete(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Code)
 	}
 }
 
@@ -133,6 +211,7 @@ func uploadTestFileRequest(t *testing.T, testfile string) httptest.ResponseRecor
 	request := httptest.NewRequest(http.MethodPost, "/upload", bytes.NewReader(body.Bytes()))
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	request.Header.Set("Path", "/chunks/test.db")
 	responseRecorder := httptest.NewRecorder()
 	app.upload(responseRecorder, request)
 

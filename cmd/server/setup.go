@@ -14,8 +14,10 @@ import (
 
 type Client struct {
 	gorm.Model
-	Name     string
-	AuthCode string
+	Name      string
+	AuthCode  string
+	Quota     uint64
+	UsedSpace uint64
 }
 
 var (
@@ -62,7 +64,6 @@ func initDB(dbURL string) error {
 		return fmt.Errorf("couldn't connect to database")
 	}
 	db.AutoMigrate(&Client{})
-	db.Create(&Client{Name: "Drachenclient", AuthCode: "1510"})
 	return nil
 }
 

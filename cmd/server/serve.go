@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -25,6 +26,11 @@ type App struct {
 	DB *gorm.DB
 }
 
+type FileStat struct {
+	Path string
+	Size int64
+}
+
 func (a *App) initialize(dbURI string) error {
 	db, err := gorm.Open(sqlite.Open(dbURI))
 	if err != nil {
@@ -34,6 +40,7 @@ func (a *App) initialize(dbURI string) error {
 	return nil
 }
 
+// TODO: Set Quota, Set UsedSpace
 func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
 		fmt.Println("user not authorized")
@@ -46,9 +53,9 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 	client := &Client{
-		Name: r.PostFormValue("name"),
-		// AuthCode: r.PostFormValue("authcode"),
+		Name:     r.PostFormValue("name"),
 		AuthCode: generateToken(32),
 	}
 
@@ -81,8 +88,8 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 		a.DB.Delete(client)
 		return
 	}
+
 	w.Header().Set("Location", base.ResolveReference(u).String())
-	w.WriteHeader(http.StatusCreated)
 }
 
 func (a *App) getAllClients(w http.ResponseWriter, r *http.Request) {
@@ -117,11 +124,25 @@ func (a *App) getClient(w http.ResponseWriter, r *http.Request) {
 	a.DB.First(&client, "id = ?", vars["id"])
 	clientJSON, _ := json.Marshal(client)
 
+	// w.WriteHeader(http.StatusOK)
+	w.Write([]byte(clientJSON))
+}
+
+func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
+	client, err := a.authenticateClient(w, r)
+	if err != nil {
+		fmt.Println("client not authorized")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	fmt.Printf("%+v\n", client)
+	clientJSON, _ := json.Marshal(client)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(clientJSON))
 }
 
-// TODO: Rename Folder, Remove Authcode changes....
+// TODO: Rename Folder, Remove Authcode changes, Add Quota update
 func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
 		fmt.Println("user not authorized")
@@ -132,7 +153,9 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	if err := r.ParseForm(); err != nil {
-		panic("failed in ParseForm() call")
+		fmt.Println("failed in ParseForm() call")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	client := &Client{
@@ -200,6 +223,7 @@ var (
 			}
 
 			router := mux.NewRouter()
+			// router.Handle("/webui/", http.StripPrefix("/webui/", http.FileServer(http.Dir(filepath.Join("ui", "build")))))
 			router.HandleFunc("/login", a.login)
 			router.HandleFunc("/clients", a.createClient).Methods("POST")
 			router.HandleFunc("/clients", a.getAllClients).Methods("GET", "OPTIONS")
@@ -211,9 +235,13 @@ var (
 			fmt.Println("starting server")
 			router.HandleFunc("/upload", a.upload).Methods("POST")
 			router.PathPrefix("/download/").HandlerFunc(a.download).Methods("GET")
-			router.HandleFunc("/repository", a.repository)
-			router.HandleFunc("/snapshot", a.uploadSnapshot).Methods("POST")
-			router.HandleFunc("/snapshot/", a.downloadSnapshot).Methods("GET")
+			// router.HandleFunc("/repository", a.repository)
+			// router.HandleFunc("/snapshot", a.uploadSnapshot).Methods("POST")
+			// router.HandleFunc("/snapshot/", a.downloadSnapshot).Methods("GET")
+			router.PathPrefix("/size/").HandlerFunc(a.getFileStats).Methods("GET")
+			router.PathPrefix("/mkdir/").HandlerFunc(a.mkdir).Methods("GET")
+			router.PathPrefix("/delete/").HandlerFunc(a.delete).Methods("DELETE")
+			router.HandleFunc("/getClientByAuthCode", a.getClientByAuthCode).Methods("GET")
 			router.HandleFunc("/testClient", a.testClientAuth).Methods("GET")
 
 			http.Handle("/", router)
@@ -254,15 +282,13 @@ func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Clien
 	authTokenHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
 
 	if len(authTokenHeader) < 2 {
-		return nil, fmt.Errorf("No authorization was given")
+		return nil, fmt.Errorf("no authorization was given")
 	}
 
 	authToken := authTokenHeader[1]
 
 	client := &Client{}
 	if err := a.DB.First(client, Client{AuthCode: authToken}).Error; err != nil {
-		// respondError(w, http.StatusNotFound, err.Error())
-		w.WriteHeader(http.StatusNotFound)
 		return nil, fmt.Errorf(err.Error())
 	}
 	return client, nil
@@ -285,20 +311,15 @@ func (a *App) testUserAuth(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) authenticateUser(w http.ResponseWriter, r *http.Request) error {
 	u, p, ok := r.BasicAuth()
-	fmt.Printf("Username: %s\n", u)
-	fmt.Printf("Password: %s\n", p)
 
 	if !ok {
-		w.WriteHeader(http.StatusUnauthorized)
 		return fmt.Errorf("security alert: no auth set")
 	}
 
 	if u != cfg.AdminUserName || utils.CheckPasswordHash(p, cfg.AdminPassword) {
-		w.WriteHeader(http.StatusUnauthorized)
 		return fmt.Errorf("security alert: authentication failed")
 	}
 
-	w.WriteHeader(http.StatusOK)
 	return nil
 }
 
@@ -308,185 +329,254 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 
 	client, err := a.authenticateClient(w, r)
 
-	if r.Method == "POST" && err == nil {
-		fmt.Printf("Client: %s\n", client.Name)
-		path := filepath.Join(cfg.StoragesPath, client.Name)
-
-		err := r.ParseMultipartForm(32 << 20)
-		if err != nil {
-			fmt.Println(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		file, handler, err := r.FormFile("uploadfile")
-		if err != nil {
-			fmt.Println(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		defer file.Close()
-
-		fmt.Fprintf(w, "%v", handler.Header)
-		f, err := os.OpenFile(filepath.Join(path, "chunks", handler.Filename), os.O_WRONLY|os.O_CREATE, 0600)
-		if err != nil {
-			fmt.Println(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		defer f.Close()
-
-		_, err = io.Copy(f, file)
-		if err != nil {
-			fmt.Println(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		fmt.Println("Stored chunk", filepath.Join(path, "chunks", handler.Filename))
+	if r.Method != "POST" || err != nil {
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
+
+	urlPath := r.Header.Get("Path")
+
+	err = r.ParseMultipartForm(32 << 20)
+	if err != nil {
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	fileContent := r.FormValue("uploadfile")
+	if err = upload(*a, *client, urlPath, fileContent); err != nil {
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	fmt.Println("Stored chunk")
+}
+
+func upload(a App, client Client, filePath string, fileContent string) error {
+	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
+	if err != nil || strings.Contains(filePath, "..") {
+		return fmt.Errorf("invalid url")
+	}
+	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if (client.Quota - client.UsedSpace) < uint64(len([]byte(fileContent))) {
+		return fmt.Errorf("client storage space used up")
+	}
+
+	_, err = io.Copy(f, bytes.NewReader([]byte(fileContent)))
+	if err != nil {
+		return err
+	}
+	stats, err := os.Stat(path)
+	if err != nil {
+		defer os.Remove(path)
+		return err
+	}
+	client.UsedSpace += uint64(stats.Size())
+	a.DB.Model(&client).Where("id = ?", client.ID).Updates(&client)
+	return nil
 }
 
 // download logic.
 func (a *App) download(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Serving chunk", r.URL.Path[10:])
+	fmt.Println("Serving file", r.URL.Path[10:])
 
-	/* path, err := authPath(w, r)
-	if err != nil {
-		fmt.Println("ERROR:", err)
-		return
-	}*/
 	client, err := a.authenticateClient(w, r)
 
 	if err != nil {
 		return
 	}
-	path := filepath.Join(cfg.StoragesPath, client.Name)
+
+	if len(r.URL.Path) < 6 {
+		fmt.Println("ERROR: Invalid url")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	path, err := downloadFile(*client, r.URL.Path[10:])
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
 	if r.Method == "GET" {
-		http.ServeFile(w, r, filepath.Join(path, "chunks", r.URL.Path[10:]))
+		http.ServeFile(w, r, filepath.Join(path))
+		return
 	}
+
+	w.WriteHeader(http.StatusBadRequest)
 }
 
-// uploadRepo logic.
-func (a *App) uploadRepo(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Receiving repository")
+func downloadFile(client Client, filePath string) (string, error) {
+	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
+	if err != nil || strings.Contains(filePath, "..") {
+		return "", fmt.Errorf("invalid url")
+	}
+	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
+	if utils.Exist(path) {
+		return path, nil
+	}
+	return "", fmt.Errorf("path not found")
+}
+
+func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Getting status of file")
 
 	client, err := a.authenticateClient(w, r)
 	if err != nil {
-		fmt.Println("ERROR:", err)
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
-	err = r.ParseMultipartForm(32 << 20)
+	if len(r.URL.Path) < 6 {
+		fmt.Println("ERROR: Invalid url")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	file, err := stat(*client, r.URL.Path[6:])
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	jData, err := json.Marshal(file)
+	if err != nil {
+		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	file, handler, err := r.FormFile("uploadfile")
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer file.Close()
-
-	fmt.Fprintf(w, "%v", handler.Header)
-	f, err := os.OpenFile(filepath.Join(cfg.StoragesPath, client.Name, "repository.knoxite"), os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, file)
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Println("Stored repository", filepath.Join(cfg.StoragesPath, client.Name, "repository.knoxite"))
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(jData))
 }
 
-// downloadRepo logic.
-func (a *App) downloadRepo(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Serving repository")
+func stat(client Client, filePath string) (FileStat, error) {
+	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
+	if err != nil || strings.Contains(filePath, "..") {
+		return FileStat{}, fmt.Errorf("ERROR: Invalid url")
+	}
+	var file FileStat
+	file.Path = filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
 
+	osFile, err := os.Stat(file.Path)
+	if err != nil {
+		return FileStat{}, fmt.Errorf("ERROR: %v", err)
+	}
+	file.Size = osFile.Size()
+
+	return file, nil
+}
+
+func (a *App) mkdir(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Creates folder(s)")
 	client, err := a.authenticateClient(w, r)
 	if err != nil {
-		fmt.Println("ERROR:", err)
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	fmt.Printf("%v\n", r.URL.Path)
+	if len(r.URL.Path) < 7 {
+		fmt.Println("ERROR: Invalid url")
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	http.ServeFile(w, r, filepath.Join(cfg.StoragesPath, client.Name, "repository.knoxite"))
-}
-
-func (a *App) repository(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "GET":
-		a.downloadRepo(w, r)
-	case "POST":
-		a.uploadRepo(w, r)
+	err = mkDir(*client, r.URL.Path[7:])
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
+
+	w.WriteHeader(http.StatusCreated)
 }
 
-// uploadSnapshot logic.
-func (a *App) uploadSnapshot(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Receiving snapshot")
+func mkDir(client Client, dirPath string) error {
+	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", dirPath))
+	if err != nil || strings.Contains(dirPath, "..") {
+		return fmt.Errorf("ERROR: Invalid url")
+	}
+	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", dirPath))
 
+	if !utils.Exist(path) {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return fmt.Errorf("ERROR: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (a *App) delete(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Deletes file(s)")
 	client, err := a.authenticateClient(w, r)
 	if err != nil {
-		fmt.Println("ERROR:", err)
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
-	err = r.ParseMultipartForm(32 << 20)
+	if len(r.URL.Path) < 8 {
+		fmt.Println("ERROR: Invalid url")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	err = deleteFile(*a, *client, r.URL.Path[8:])
 	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	file, handler, err := r.FormFile("uploadfile")
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer file.Close()
-
-	fmt.Fprintf(w, "%v", handler.Header)
-	f, err := os.OpenFile(filepath.Join(cfg.StoragesPath, client.Name, "snapshots", handler.Filename), os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	defer f.Close()
-
-	_, err = io.Copy(f, file)
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Println("Stored snapshot", filepath.Join(cfg.StoragesPath, client.Name, "snapshots", handler.Filename))
+	w.WriteHeader(http.StatusOK)
 }
 
-// downloadRepo logic.
-func (a *App) downloadSnapshot(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Serving snapshot", r.URL.Path[10:])
+func deleteFile(a App, client Client, filePath string) error {
+	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
+	if err != nil || strings.Contains(filePath, "..") {
+		return fmt.Errorf("ERROR: Invalid url")
+	}
+	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
 
-	client, err := a.authenticateClient(w, r)
+	stats, err := os.Stat(path)
 	if err != nil {
-		fmt.Println("ERROR:", err)
-		return
+		return fmt.Errorf("ERROR: %v", err)
 	}
 
-	http.ServeFile(w, r, filepath.Join(cfg.StoragesPath, client.Name, "snapshots", r.URL.Path[10:]))
+	if stats.IsDir() {
+		return fmt.Errorf("ERROR: can't delete folders")
+	}
+
+	client.UsedSpace -= uint64(stats.Size())
+	a.DB.Model(&client).Where("id = ?", client.ID).Updates(&client)
+
+	if utils.Exist(path) {
+		if err := os.Remove(path); err != nil {
+			client.UsedSpace += uint64(stats.Size())
+			return fmt.Errorf("ERROR: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func AvailableSpace() (uint64, error) {
+	statOS := &StatOS{}
+	space, err := statOS.GetAvailableStorageSpace()
+	if err != nil {
+		return 0, err
+	}
+
+	return space, nil
 }

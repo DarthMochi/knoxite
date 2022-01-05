@@ -17,9 +17,9 @@ var (
 
 	RootCmd = &cobra.Command{
 		Use:   "server",
-		Short: "Knoxite is a data storage & backup tool",
-		Long: "Knoxite is a secure and flexible data storage and backup tool\n" +
-			"Complete documentation is available at https://github.com/knoxite/knoxite",
+		Short: "knoxite server is a server backend for knoxite",
+		Long: "knoxite server is a server backend for knoxite\n" +
+			"Complete setup information is available at https://github.com/knoxite/knoxite/cmd/server/README.md",
 		SilenceErrors:     true,
 		SilenceUsage:      true,
 		DisableAutoGenTag: true,

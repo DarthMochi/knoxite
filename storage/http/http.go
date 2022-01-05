@@ -1,6 +1,7 @@
 /*
  * knoxite
- *     Copyright (c) 2016-2020, Christian Muehlhaeuser <muesli@gmail.com>
+ *     Copyright (c) 2016-2022, Christian Muehlhaeuser <muesli@gmail.com>
+ *     Copyright (c) 2021-2022, Raschaad Yassine <Raschaad@gmx.de>
  *
  *   For license see LICENSE
  */
@@ -9,20 +10,28 @@ package http
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"strconv"
+	"time"
 
 	"github.com/knoxite/knoxite"
 )
 
 // HTTPStorage stores data on a remote HTTP server.
 type HTTPStorage struct {
-	URL url.URL
+	url url.URL
+	knoxite.StorageFilesystem
+}
+
+type BackendClient struct {
+	Name      string
+	AuthCode  string
+	Quota     uint64
+	UsedSpace uint64
 }
 
 func init() {
@@ -31,14 +40,25 @@ func init() {
 
 // NewBackend returns a HTTPStorage backend.
 func (*HTTPStorage) NewBackend(u url.URL) (knoxite.Backend, error) {
-	return &HTTPStorage{
-		URL: u,
-	}, nil
+	authCode := u.User.Username()
+	if authCode == "" {
+		return &HTTPStorage{}, knoxite.ErrInvalidUsername
+	}
+
+	backend := HTTPStorage{url: u}
+
+	fs, err := knoxite.NewStorageFilesystem("/", &backend)
+	if err != nil {
+		return &HTTPStorage{}, err
+	}
+	backend.StorageFilesystem = fs
+
+	return &backend, nil
 }
 
 // Location returns the type and location of the repository.
 func (backend *HTTPStorage) Location() string {
-	return backend.URL.String()
+	return backend.url.String()
 }
 
 // Close the backend.
@@ -53,136 +73,188 @@ func (backend *HTTPStorage) Protocols() []string {
 
 // Description returns a user-friendly description for this backend.
 func (backend *HTTPStorage) Description() string {
-	return "HTTP(S) Storage"
+	return "knoxite Server Storage"
 }
 
 // AvailableSpace returns the free space on this backend.
 func (backend *HTTPStorage) AvailableSpace() (uint64, error) {
-	return uint64(0), knoxite.ErrAvailableSpaceUnknown
-}
-
-// LoadChunk loads a Chunk from network.
-func (backend *HTTPStorage) LoadChunk(shasum string, part, totalParts uint) ([]byte, error) {
-	//	fmt.Printf("Fetching from: %s.\n", backend.URL+"/download/"+chunk.ShaSum)
-	res, err := http.Get(backend.URL.String() + "/download/" + shasum + "." + strconv.FormatUint(uint64(part), 10) + "_" + strconv.FormatUint(uint64(totalParts), 10))
-	if err != nil {
-		return []byte{}, err
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return []byte{}, knoxite.ErrLoadChunkFailed
-	}
-
-	return ioutil.ReadAll(res.Body)
-}
-
-// StoreChunk stores a single Chunk on network.
-func (backend *HTTPStorage) StoreChunk(shasum string, part, totalParts uint, data []byte) (uint64, error) {
-	bodyBuf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuf)
-
-	// this step is very important
-	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", shasum+"."+strconv.FormatUint(uint64(part), 10)+"_"+strconv.FormatUint(uint64(totalParts), 10))
-	if err != nil {
-		fmt.Println("error writing to buffer")
-		return 0, err
-	}
-
-	_, err = fileWriter.Write(data)
+	client, err := backend.GetClientInfo()
 	if err != nil {
 		return 0, err
 	}
 
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
+	return client.Quota - client.UsedSpace, nil
+}
 
-	resp, err := http.Post(backend.URL.String()+"/upload", contentType, bodyBuf)
+func (backend *HTTPStorage) CreatePath(path string) error {
+	var httpClient = &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/mkdir/"+path, nil)
+	if err != nil {
+		return knoxite.ErrInvalidRepositoryURL
+	}
+	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	_, err = httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (backend *HTTPStorage) Stat(path string) (uint64, error) {
+	var httpClient = &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/stat/"+path, nil)
+	if err != nil {
+		return 0, knoxite.ErrInvalidRepositoryURL
+	}
+	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, knoxite.ErrStoreChunkFailed
+	var file struct {
+		Path string
+		Size int64
 	}
-	_, err = ioutil.ReadAll(resp.Body)
+	err = json.NewDecoder(resp.Body).Decode(&file)
 	if err != nil {
 		return 0, err
 	}
 
-	//	fmt.Printf("\tUploaded chunk: %d bytes\n", len(*data))
-	return uint64(len(data)), err
+	return uint64(file.Size), nil
 }
 
-// DeleteChunk deletes a single Chunk.
-func (backend *HTTPStorage) DeleteChunk(shasum string, parts, totalParts uint) error {
-	// FIXME: implement this
-	return knoxite.ErrDeleteChunkFailed
-}
-
-// LoadSnapshot loads a snapshot.
-func (backend *HTTPStorage) LoadSnapshot(id string) ([]byte, error) {
-	//	fmt.Printf("Fetching snapshot from: %s.\n", backend.URL+"/snapshot/"+id)
-	res, err := http.Get(backend.URL.String() + "/snapshot/" + id)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer res.Body.Close()
-
-	return ioutil.ReadAll(res.Body)
-}
-
-// SaveSnapshot stores a snapshot.
-func (backend *HTTPStorage) SaveSnapshot(id string, data []byte) error {
-	bodyBuf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuf)
-
-	// this step is very important
-	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", id)
-	if err != nil {
-		fmt.Println("error writing to buffer")
-		return err
+func (backend *HTTPStorage) ReadFile(path string) ([]byte, error) {
+	var httpClient = &http.Client{
+		Timeout: time.Second * 10,
 	}
 
-	_, err = fileWriter.Write(data)
+	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/download/"+path, nil)
 	if err != nil {
-		return err
+		return nil, knoxite.ErrInvalidRepositoryURL
 	}
-
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	resp, err := http.Post(backend.URL.String()+"/snapshot", contentType, bodyBuf)
+	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
-	_, err = ioutil.ReadAll(resp.Body)
+
+	return ioutil.ReadAll(resp.Body)
+}
+
+func (backend *HTTPStorage) WriteFile(path string, data []byte) (size uint64, err error) {
+	var httpClient = &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+
+	fw, err := writer.CreateFormField("uploadfile")
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = fw.Write(data)
+	if err != nil {
+		return 0, err
+	}
+	writer.Close()
+
+	request, err := http.NewRequest(http.MethodPost, backend.url.String()+"/upload", body)
+	if err != nil {
+		return 0, err
+	}
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Path", path)
+	request.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+
+	_, err = httpClient.Do(request)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(len(data)), nil
+}
+
+func (backend *HTTPStorage) DeleteFile(path string) error {
+	var httpClient = &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, backend.url.String()+"/delete/"+path, nil)
+	if err != nil {
+		return knoxite.ErrInvalidRepositoryURL
+	}
+	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	_, err = httpClient.Do(req)
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return knoxite.ErrStoreSnapshotFailed
+
+	return nil
+}
+
+func (backend *HTTPStorage) GetClientInfo() (BackendClient, error) {
+	var httpClient = &http.Client{
+		Timeout: time.Second * 10,
 	}
-	//	fmt.Printf("Uploaded snapshot: %d bytes\n", len(data))
-	return err
+
+	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/getClientByAuthCode", nil)
+	if err != nil {
+		return BackendClient{}, knoxite.ErrInvalidRepositoryURL
+	}
+	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return BackendClient{}, err
+	}
+	defer resp.Body.Close()
+
+	var client BackendClient
+	err = json.NewDecoder(resp.Body).Decode(&client)
+	if err != nil {
+		return BackendClient{}, err
+	}
+	return client, nil
 }
 
 // LoadChunkIndex reads the chunk-index.
 func (backend *HTTPStorage) LoadChunkIndex() ([]byte, error) {
-	//	fmt.Printf("Fetching chunk-index from: %s.\n", backend.URL+"/chunkindex")
-	res, err := http.Get(backend.URL.String() + "/chunkindex")
-	if err != nil {
-		log.Fatal(err)
+	var httpClient = &http.Client{
+		Timeout: time.Second * 10,
 	}
-	defer res.Body.Close()
 
-	return ioutil.ReadAll(res.Body)
+	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/download/chunks/index", nil)
+	if err != nil {
+		return []byte{}, knoxite.ErrInvalidRepositoryURL
+	}
+	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return []byte{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return []byte{}, fmt.Errorf("no chunk index created yet")
+	}
+
+	return ioutil.ReadAll(resp.Body)
 }
 
 // SaveChunkIndex stores the chunk-index.
 func (backend *HTTPStorage) SaveChunkIndex(data []byte) error {
+	httpClient := &http.Client{
+		Timeout: time.Second * 10,
+	}
 	bodyBuf := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(bodyBuf)
 
@@ -201,7 +273,15 @@ func (backend *HTTPStorage) SaveChunkIndex(data []byte) error {
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
 
-	resp, err := http.Post(backend.URL.String()+"/chunkindex", contentType, bodyBuf)
+	req, err := http.NewRequest(http.MethodPost, backend.url.String()+"/upload", bodyBuf)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	req.Header.Set("Path", "/chunks/index")
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -213,59 +293,6 @@ func (backend *HTTPStorage) SaveChunkIndex(data []byte) error {
 	if resp.StatusCode != http.StatusOK {
 		return knoxite.ErrStoreChunkIndexFailed
 	}
-	//	fmt.Printf("Uploaded chunk-index: %d bytes\n", len(data))
-	return err
-}
 
-// InitRepository creates a new repository.
-func (backend *HTTPStorage) InitRepository() error {
-	return nil
-}
-
-// LoadRepository reads the metadata for a repository.
-func (backend *HTTPStorage) LoadRepository() ([]byte, error) {
-	//	fmt.Printf("Fetching repository from: %s.\n", backend.URL+"/repository")
-	res, err := http.Get(backend.URL.String() + "/repository")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer res.Body.Close()
-
-	return ioutil.ReadAll(res.Body)
-}
-
-// SaveRepository stores the metadata for a repository.
-func (backend *HTTPStorage) SaveRepository(data []byte) error {
-	bodyBuf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuf)
-
-	// this step is very important
-	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", "repository.knoxite")
-	if err != nil {
-		fmt.Println("error writing to buffer")
-		return err
-	}
-
-	_, err = fileWriter.Write(data)
-	if err != nil {
-		return err
-	}
-
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	resp, err := http.Post(backend.URL.String()+"/repository", contentType, bodyBuf)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return knoxite.ErrStoreRepositoryFailed
-	}
-	//	fmt.Printf("Uploaded repository: %d bytes\n", len(data))
 	return err
 }

@@ -45,16 +45,21 @@ func (sc *ServerConfig) Save(u string) error {
 		return err
 	}
 
-	cfgDir := filepath.Dir(path.Path)
-	if !utils.Exist(cfgDir) {
-		if err := os.MkdirAll(cfgDir, 0755); err != nil {
-			return err
-		}
+	sc.StoragesPath, err = filepath.Abs(sc.StoragesPath)
+	if err != nil {
+		return err
 	}
 
 	buf := new(bytes.Buffer)
 	if err := toml.NewEncoder(buf).Encode(*sc); err != nil {
 		return err
+	}
+
+	cfgDir := filepath.Dir(path.Path)
+	if !utils.Exist(cfgDir) {
+		if err := os.MkdirAll(cfgDir, 0755); err != nil {
+			return err
+		}
 	}
 
 	return ioutil.WriteFile(path.Path, buf.Bytes(), 0600)
