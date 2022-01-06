@@ -1,3 +1,6 @@
+//go:build windows || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
+// +build windows darwin dragonfly freebsd linux netbsd openbsd solaris
+
 /*
  * knoxite
  *     Copyright (c) 2016-2022, Christian Muehlhaeuser <muesli@gmail.com>

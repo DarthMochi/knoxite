@@ -1,3 +1,6 @@
+//go:build windows || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
+// +build windows darwin dragonfly freebsd linux netbsd openbsd solaris
+
 package main
 
 import "os"

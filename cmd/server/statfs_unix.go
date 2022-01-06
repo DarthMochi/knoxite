@@ -1,5 +1,6 @@
-//go:build darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
+//go:build (darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris) && !windows
 // +build darwin dragonfly freebsd linux netbsd openbsd solaris
+// +build !windows
 
 package main
 

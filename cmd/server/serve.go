@@ -1,3 +1,6 @@
+//go:build windows || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
+// +build windows darwin dragonfly freebsd linux netbsd openbsd solaris
+
 package main
 
 import (
@@ -351,6 +354,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	fmt.Println("Stored chunk")
 }
 
