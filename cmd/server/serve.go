@@ -272,7 +272,7 @@ func init() {
 
 func (a *App) testClientAuth(w http.ResponseWriter, r *http.Request) {
 	if client, err := a.authenticateClient(w, r); err != nil {
-		fmt.Errorf("error")
+		fmt.Fprintf(w, "error")
 	} else {
 		fmt.Fprintf(w, "Client name is: %s", client.Name)
 	}
@@ -303,7 +303,7 @@ func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Clien
 
 func (a *App) testUserAuth(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
-		fmt.Errorf("error")
+		fmt.Fprintf(w, "error")
 	} else {
 		fmt.Fprintf(w, "User name authenticated")
 	}
