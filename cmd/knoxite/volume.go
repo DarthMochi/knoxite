@@ -13,9 +13,11 @@ import (
 
 	shutdown "github.com/klauspost/shutdown2"
 	"github.com/muesli/gotable"
+	"github.com/rsteube/carapace"
 	"github.com/spf13/cobra"
 
 	"github.com/knoxite/knoxite"
+	"github.com/knoxite/knoxite/cmd/knoxite/action"
 )
 
 // VolumeInitOptions holds all the options that can be set for the 'volume init' command.
@@ -71,6 +73,10 @@ func init() {
 	volumeCmd.AddCommand(volumeRemoveCmd)
 	volumeCmd.AddCommand(volumeListCmd)
 	RootCmd.AddCommand(volumeCmd)
+
+	carapace.Gen(volumeRemoveCmd).PositionalCompletion(
+		action.ActionVolumes(volumeCmd),
+	)
 }
 
 func executeVolumeInit(name, description string) error {
@@ -93,7 +99,7 @@ func executeVolumeInit(name, description string) error {
 
 	err = repository.AddVolume(vol)
 	if err != nil {
-		return fmt.Errorf("Creating volume %s failed: %v", name, err)
+		return fmt.Errorf("creating volume %s failed: %v", name, err)
 	}
 
 	annotation := "Name: " + vol.Name
