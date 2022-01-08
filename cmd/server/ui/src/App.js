@@ -1,69 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Navigation from './Navigation';
 import Clients from './Clients';
-import Form from './Form';
-import { Container } from 'react-bootstrap';
+import Login from './Login';
+import { Container, Row, Col } from 'react-bootstrap';
 // import './App.css';
 
-class App extends React.Component {
-  state = {
-    error: null,
-    isLoaded: false,
-    clients: [],
+function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem('basetoken') || '');
+
+  const logout = () => {
+    localStorage.setItem('basetoken', '');
+    setToken('');
+    setIsLoggedIn(false);
   }
 
-  deleteClient = (index) => {
-    const {clients} = this.state
-
-    this.setState({
-      clients: clients.filter((clients, i) => {
-        return i !== index
-      }),
-    })
+  // Only checking for token seems weak. By manually entering any token to local storage
+  // the app thinks you are authenticated and authorizes the main view.
+  // Probably solved by using an additional flag 'isLoggedIn' that gets set (unset) on
+  // login (logout)
+  if (!token || !isLoggedIn) {
+    return (
+      <Container fluid>
+        <Row className="justify-content-md-center">
+          <Col md="auto"> <Login setToken={setToken} setIsLoggedIn={setIsLoggedIn} /> </Col>
+        </Row>
+      </Container>
+    )
   }
 
-  createClient = () => {
-    const {clients} = this.state
-
-    this.setState()
-  }
-
-  componentDidMount() {
-    fetch("/clients")
-      .then((result) => result.json())
-      .then((result) => {
-          this.setState({
-            isLoaded: true,
-            clients: result,
-          });
-        },
-        (error) => {
-          this.setState({
-            isLoaded: true,
-            error,
-          });
-        }
-      )
-  } 
-
-  render() {
-    const {error, isLoaded, clients} = this.state;
-    
-    if (error) {
-      return <div>Error: {error.message}</div>
-    } else if (!isLoaded) {
-      return <div>Loading...</div>
-    } else {
-      return (
-        <Container fluid>
-          <Navigation />
-          <Clients clientData={clients} deleteClient={this.deleteClient} />
-          <button onClick={() => console.log("not implemented")}>Add new client</button>
-          <Form />
-        </Container>
-      )
-    }
-  }
+  return (
+    <Container fluid>
+      <Navigation logout={logout} />
+      <Row className="justify-content-md-center">
+        <Clients token={token} />
+      </Row>
+    </Container>
+  );
 }
 
 export default App;
