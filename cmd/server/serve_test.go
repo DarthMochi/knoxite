@@ -173,7 +173,7 @@ func TestDeleteFile(t *testing.T) {
 	}
 }
 
-func TestDeleteFilePathTraversal(t *testing.T) {
+func TestFilePathTraversal(t *testing.T) {
 	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
 	defer cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
@@ -187,6 +187,58 @@ func TestDeleteFilePathTraversal(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
 	responseRecorder := httptest.NewRecorder()
 	app.delete(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Code)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/mkdir/chunks/../../../../../../../../../../../chunks/test.db", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder = httptest.NewRecorder()
+	app.mkdir(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Code)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/stat/chunks/../../../../../../../../../../../chunks/test.db", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder = httptest.NewRecorder()
+	app.getFileStats(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Code)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/download/chunks/../../../../../../../../../../../chunks/test.db", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder = httptest.NewRecorder()
+	app.download(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusNotFound {
+		t.Errorf("Want status '%d', got '%d'", http.StatusNotFound, responseRecorder.Code)
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	testfile := "test.db"
+
+	fw, err := writer.CreateFormFile("uploadfile", testfile)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+
+	file, err := os.Open(path.Join(".", testfile))
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	_, err = io.Copy(fw, file)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	writer.Close()
+	request = httptest.NewRequest(http.MethodPost, "/upload", bytes.NewReader(body.Bytes()))
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	request.Header.Set("Path", "/chunks/../../../../../../../../../../../chunks/test.db")
+	responseRecorder = httptest.NewRecorder()
+	app.upload(responseRecorder, request)
 	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
 		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Code)
 	}

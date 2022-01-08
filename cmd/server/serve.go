@@ -333,29 +333,29 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	client, err := a.authenticateClient(w, r)
 
 	if r.Method != "POST" || err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	urlPath := r.Header.Get("Path")
+	if len(r.URL.Path) < 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	err = r.ParseMultipartForm(32 << 20)
 	if err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	fileContent := r.FormValue("uploadfile")
 	if err = upload(*a, *client, urlPath, fileContent); err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Println("Stored chunk")
 }
 
 func upload(a App, client Client, filePath string, fileContent string) error {
@@ -390,16 +390,14 @@ func upload(a App, client Client, filePath string, fileContent string) error {
 
 // download logic.
 func (a *App) download(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Serving file", r.URL.Path[10:])
-
 	client, err := a.authenticateClient(w, r)
 
 	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	if len(r.URL.Path) < 6 {
-		fmt.Println("ERROR: Invalid url")
+	if len(r.URL.Path) < 10 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -435,27 +433,23 @@ func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
 
 	client, err := a.authenticateClient(w, r)
 	if err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	if len(r.URL.Path) < 6 {
-		fmt.Println("ERROR: Invalid url")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	file, err := stat(*client, r.URL.Path[6:])
 	if err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	jData, err := json.Marshal(file)
 	if err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -482,16 +476,13 @@ func stat(client Client, filePath string) (FileStat, error) {
 }
 
 func (a *App) mkdir(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Creates folder(s)")
 	client, err := a.authenticateClient(w, r)
 	if err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 	fmt.Printf("%v\n", r.URL.Path)
 	if len(r.URL.Path) < 7 {
-		fmt.Println("ERROR: Invalid url")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -522,23 +513,19 @@ func mkDir(client Client, dirPath string) error {
 }
 
 func (a *App) delete(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Deletes file(s)")
 	client, err := a.authenticateClient(w, r)
 	if err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	if len(r.URL.Path) < 8 {
-		fmt.Println("ERROR: Invalid url")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	err = deleteFile(*a, *client, r.URL.Path[8:])
 	if err != nil {
-		fmt.Println("ERROR: ", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
