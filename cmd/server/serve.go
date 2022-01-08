@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -43,7 +43,6 @@ func (a *App) initialize(dbURI string) error {
 	return nil
 }
 
-// TODO: Set Quota, Set UsedSpace
 func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
 		fmt.Println("user not authorized")
@@ -57,14 +56,37 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	quota, err := strconv.ParseUint(r.PostFormValue("quota"), 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	availableSpace, err := a.AvailableSpace()
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if quota > availableSpace {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	client := &Client{
 		Name:     r.PostFormValue("name"),
+		Quota:    quota,
 		AuthCode: generateToken(32),
+	}
+
+	if strings.Contains(client.Name, "..") {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	a.DB.Create(client)
 
-	storagePath := path.Join(cfg.StoragesPath, client.Name, "chunks", "empty")
+	storagePath := filepath.Join(cfg.StoragesPath, client.Name, "chunks", "empty")
 	cfgDir := filepath.Dir(storagePath)
 	if !utils.Exist(cfgDir) {
 		if err := os.MkdirAll(cfgDir, 0755); err != nil {
@@ -127,7 +149,7 @@ func (a *App) getClient(w http.ResponseWriter, r *http.Request) {
 	a.DB.First(&client, "id = ?", vars["id"])
 	clientJSON, _ := json.Marshal(client)
 
-	// w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(clientJSON))
 }
 
@@ -145,7 +167,6 @@ func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(clientJSON))
 }
 
-// TODO: Rename Folder, Remove Authcode changes, Add Quota update
 func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
 		fmt.Println("user not authorized")
@@ -161,9 +182,43 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var oldClient Client
+	a.DB.Model(&oldClient).Where("id = ?", vars["id"])
+
+	oldName := oldClient.Name
+	oldQuota := oldClient.Quota
+
+	quota, err := strconv.ParseUint(r.PostFormValue("quota"), 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	availableSpace, err := a.AvailableSpace()
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if quota > availableSpace || oldQuota > quota {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	client := &Client{
-		Name:     r.PostFormValue("name"),
-		AuthCode: r.PostFormValue("authcode"),
+		Name:  r.PostFormValue("name"),
+		Quota: quota,
+	}
+
+	if strings.Contains(client.Name, "..") {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	err = os.Rename(filepath.Join("/", cfg.StoragesPath, oldName), filepath.Join("/", cfg.StoragesPath, client.Name))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	a.DB.Model(&client).Where("id = ?", vars["id"]).Updates(&client)
@@ -181,7 +236,7 @@ func (a *App) deleteClient(w http.ResponseWriter, r *http.Request) {
 
 	var client Client
 	a.DB.First(&client, "id = ?", vars["id"])
-	os.RemoveAll(path.Join(cfg.StoragesPath, client.Name))
+	os.RemoveAll(filepath.Join(cfg.StoragesPath, client.Name))
 
 	a.DB.Delete(&Client{}, vars["id"])
 
@@ -238,9 +293,6 @@ var (
 			fmt.Println("starting server")
 			router.HandleFunc("/upload", a.upload).Methods("POST")
 			router.PathPrefix("/download/").HandlerFunc(a.download).Methods("GET")
-			// router.HandleFunc("/repository", a.repository)
-			// router.HandleFunc("/snapshot", a.uploadSnapshot).Methods("POST")
-			// router.HandleFunc("/snapshot/", a.downloadSnapshot).Methods("GET")
 			router.PathPrefix("/size/").HandlerFunc(a.getFileStats).Methods("GET")
 			router.PathPrefix("/mkdir/").HandlerFunc(a.mkdir).Methods("GET")
 			router.PathPrefix("/delete/").HandlerFunc(a.delete).Methods("DELETE")
@@ -289,6 +341,7 @@ func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Clien
 	}
 
 	authToken := authTokenHeader[1]
+	fmt.Println("authToken: ", authToken)
 
 	client := &Client{}
 	if err := a.DB.First(client, Client{AuthCode: authToken}).Error; err != nil {
@@ -350,7 +403,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileContent := r.FormValue("uploadfile")
-	if err = upload(*a, *client, urlPath, fileContent); err != nil {
+	if err = uploadFile(*a, *client, urlPath, fileContent); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -358,7 +411,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func upload(a App, client Client, filePath string, fileContent string) error {
+func uploadFile(a App, client Client, filePath string, fileContent string) error {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
 		return fmt.Errorf("invalid url")
@@ -549,25 +602,27 @@ func deleteFile(a App, client Client, filePath string) error {
 		return fmt.Errorf("ERROR: can't delete folders")
 	}
 
-	client.UsedSpace -= uint64(stats.Size())
-	a.DB.Model(&client).Where("id = ?", client.ID).Updates(&client)
-
 	if utils.Exist(path) {
 		if err := os.Remove(path); err != nil {
-			client.UsedSpace += uint64(stats.Size())
 			return fmt.Errorf("ERROR: %v", err)
 		}
 	}
 
+	client.UsedSpace -= uint64(stats.Size())
+	a.DB.Model(&client).Where("id = ?", client.ID).Updates(&client)
+
 	return nil
 }
 
-func AvailableSpace() (uint64, error) {
+func (a *App) AvailableSpace() (uint64, error) {
 	statOS := &StatOS{}
 	space, err := statOS.GetAvailableStorageSpace()
 	if err != nil {
 		return 0, err
 	}
 
-	return space, nil
+	var totalQuota uint64
+	a.DB.Table("clients").Select("sum(quota)").Row().Scan(&totalQuota)
+
+	return space - totalQuota, nil
 }

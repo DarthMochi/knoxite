@@ -34,7 +34,7 @@ func TestCreateClient(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
-	app.initialize("test.db")
+	app.initialize(testDatabase)
 
 	responseRecorder := createClient(t)
 	var clients []Client
@@ -275,7 +275,8 @@ func uploadTestFileRequest(t *testing.T, testfile string) httptest.ResponseRecor
 
 func createClient(t *testing.T) httptest.ResponseRecorder {
 	body := url.Values{
-		"name": {newClient.Name},
+		"name":  {newClient.Name},
+		"quota": []string{"1000000000"},
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))

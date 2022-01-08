@@ -35,9 +35,6 @@ go build $SCRIPT_DIR/cmd/server
 # wait for knoxite server to boot up
 sleep 2
 
-echo $ADMIN_USERNAME
-echo $PASSWORD_HASH
-
 # encode username and hashed password to base64 string
 USER_AUTH=$(echo -n "$ADMIN_USERNAME:$PASSWORD_HASH" | base64 | tr -d "\n")
 
@@ -52,6 +49,4 @@ AUTH_CODE=$(echo $JSON | jq -r '.AuthCode')
 
 # build knoxite url
 export KNOXITE_HTTP_URL=http://$AUTH_CODE@localhost:$ADMIN_PORT
-
-echo $KNOXITE_HTTP_URL
 
