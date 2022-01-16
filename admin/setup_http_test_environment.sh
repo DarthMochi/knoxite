@@ -14,9 +14,9 @@
 ADMIN_USERNAME=abc
 ADMIN_PASSWORD=123
 ADMIN_PORT=8080
-STORAGES=/tmp/repositories
-SERVER_CONFIG=knoxite-server.conf
-DATABASE_NAME=test.db
+export STORAGES=/tmp/repositories
+export SERVER_CONFIG=knoxite-server.conf
+export DATABASE_NAME=test.db
 PASSWORD_HASH=$(htpasswd -bnBC 14 "" $ADMIN_PASSWORD | tr -d ':\n' | sed 's/$2y/$2a/')
 TEST_CLIENT=testuser
 
@@ -39,7 +39,7 @@ sleep 2
 USER_AUTH=$(echo -n "$ADMIN_USERNAME:$PASSWORD_HASH" | base64 | tr -d "\n")
 
 # create test client
-curl -H "Authorization: Basic $USER_AUTH" -H "Content-Type: application/x-www-form-urlencoded" -X POST "http://localhost:$ADMIN_PORT/clients" -d "name=$TEST_CLIENT"
+curl -H "Authorization: Basic $USER_AUTH" -H "Content-Type: application/x-www-form-urlencoded" -X POST "http://localhost:$ADMIN_PORT/clients" -d "name=$TEST_CLIENT&quota=100000000"
 
 # retrieve client info of testuser
 JSON=$(curl -H "Authorization: Basic $USER_AUTH" http://localhost:$ADMIN_PORT/clients/1 -s)

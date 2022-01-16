@@ -4,6 +4,7 @@
 package utils
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -68,4 +69,48 @@ func HashPassword(password string) (string, error) {
 func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+func ByteArrDiff(original, new []byte) (int64, error) {
+	fmt.Println("new chunk size: ", len(new))
+	fmt.Println("old chunk size: ", len(original))
+	// Checks, if new byte array is initialized.
+	if (new == nil) || len(new) < 1 {
+		return 0, fmt.Errorf("no bytes can be written")
+	}
+
+	// Checks, if original byte array is empty and returns the length of the new byte array, if original is empty.
+	if (original == nil) || len(original) < 1 {
+		return int64(len(new)), nil
+	}
+
+	smallerArr := original
+	biggerArr := new
+	lenO := len(original)
+	lenN := len(new)
+
+	if lenN < lenO {
+		biggerArr = original
+		smallerArr = new
+	}
+
+	// Calculates the difference between the two.
+	var diff int64 = 0
+	for i := range smallerArr {
+		if int16(smallerArr[i]) != int16(biggerArr[i]) {
+			diff += 1
+		}
+	}
+
+	diff -= int64(lenO) - int64(lenN)
+
+	return diff, nil
+}
+
+func Abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+
+	return x
 }

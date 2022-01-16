@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 
 	backendTest = &storage.BackendTest{
 		URL:         knoxiteurl,
-		Protocols:   []string{"http"},
+		Protocols:   []string{"http", "https"},
 		Description: "knoxite server storage",
 		TearDown: func(tb *storage.BackendTest) {
 			db := tb.Backend.(*HTTPStorage)

@@ -4,12 +4,11 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -186,7 +185,6 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	a.DB.Model(&oldClient).Where("id = ?", vars["id"])
 
 	oldName := oldClient.Name
-	oldQuota := oldClient.Quota
 
 	quota, err := strconv.ParseUint(r.PostFormValue("quota"), 10, 64)
 	if err != nil {
@@ -200,7 +198,7 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if quota > availableSpace || oldQuota > quota {
+	if quota > availableSpace || quota < oldClient.UsedSpace {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -227,7 +225,6 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) deleteClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
-		fmt.Println("user not authorized")
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -295,7 +292,7 @@ var (
 			router.PathPrefix("/download/").HandlerFunc(a.download).Methods("GET")
 			router.PathPrefix("/size/").HandlerFunc(a.getFileStats).Methods("GET")
 			router.PathPrefix("/mkdir/").HandlerFunc(a.mkdir).Methods("GET")
-			router.PathPrefix("/delete/").HandlerFunc(a.delete).Methods("DELETE")
+			router.PathPrefix("/delete").HandlerFunc(a.delete).Methods("DELETE")
 			router.HandleFunc("/getClientByAuthCode", a.getClientByAuthCode).Methods("GET")
 			router.HandleFunc("/testClient", a.testClientAuth).Methods("GET")
 
@@ -341,7 +338,6 @@ func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Clien
 	}
 
 	authToken := authTokenHeader[1]
-	fmt.Println("authToken: ", authToken)
 
 	client := &Client{}
 	if err := a.DB.First(client, Client{AuthCode: authToken}).Error; err != nil {
@@ -403,42 +399,63 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileContent := r.FormValue("uploadfile")
-	if err = uploadFile(*a, *client, urlPath, fileContent); err != nil {
+	diff, err := a.UploadFile(*client, urlPath, fileContent)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
+	filestat := FileStat{
+		Path: urlPath,
+		Size: diff,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(filestat)
 }
 
-func uploadFile(a App, client Client, filePath string, fileContent string) error {
+func (a *App) UploadFile(client Client, filePath string, fileContent string) (int64, error) {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
-		return fmt.Errorf("invalid url")
+		return 0, fmt.Errorf("invalid url")
 	}
 	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer f.Close()
 
 	if (client.Quota - client.UsedSpace) < uint64(len([]byte(fileContent))) {
-		return fmt.Errorf("client storage space used up")
+		return 0, fmt.Errorf("client storage space used up")
 	}
 
-	_, err = io.Copy(f, bytes.NewReader([]byte(fileContent)))
+	fileinfo, err := f.Stat()
 	if err != nil {
-		return err
+		return 0, fmt.Errorf("couldn't read file information")
 	}
-	stats, err := os.Stat(path)
+
+	buf := make([]byte, fileinfo.Size())
+	f.Read(buf)
+	diff, err := utils.ByteArrDiff(buf, []byte(fileContent))
 	if err != nil {
-		defer os.Remove(path)
-		return err
+		return 0, err
 	}
-	client.UsedSpace += uint64(stats.Size())
+
+	err = os.WriteFile(path, []byte(fileContent), 0600)
+	if err != nil {
+		return 0, err
+	}
+	if utils.Abs(int64(client.UsedSpace)-diff) < 0 {
+		client.UsedSpace = 0
+	} else if diff < 0 {
+		client.UsedSpace -= uint64(diff)
+	} else if diff > 0 {
+		client.UsedSpace += uint64(diff)
+	}
 	a.DB.Model(&client).Where("id = ?", client.ID).Updates(&client)
-	return nil
+	return diff, nil
 }
 
 // download logic.
@@ -455,35 +472,34 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path, err := downloadFile(*client, r.URL.Path[10:])
+	fmt.Println("Serving file: ", r.URL.Path[10:])
+	data, err := a.DownloadFile(*client, r.URL.Path[10:])
+	fmt.Println(err)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	if r.Method == "GET" {
-		http.ServeFile(w, r, filepath.Join(path))
-		return
-	}
-
-	w.WriteHeader(http.StatusBadRequest)
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }
 
-func downloadFile(client Client, filePath string) (string, error) {
+func (a *App) DownloadFile(client Client, filePath string) ([]byte, error) {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
-		return "", fmt.Errorf("invalid url")
+		return nil, fmt.Errorf("invalid url")
 	}
 	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
-	if utils.Exist(path) {
-		return path, nil
+	if !utils.Exist(path) {
+		return nil, fmt.Errorf("path not found")
 	}
-	return "", fmt.Errorf("path not found")
+
+	f, err := os.OpenFile(path, os.O_RDONLY, 0600)
+
+	return ioutil.ReadAll(f)
 }
 
 func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Getting status of file")
-
 	client, err := a.authenticateClient(w, r)
 	if err != nil {
 		w.WriteHeader(http.StatusForbidden)
@@ -572,12 +588,13 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(r.URL.Path) < 8 {
+	urlPath := r.Header.Get("Path")
+	if len(urlPath) < 1 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	err = deleteFile(*a, *client, r.URL.Path[8:])
+	err = a.DeleteFile(*client, urlPath)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -586,7 +603,7 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func deleteFile(a App, client Client, filePath string) error {
+func (a *App) DeleteFile(client Client, filePath string) error {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
 		return fmt.Errorf("ERROR: Invalid url")

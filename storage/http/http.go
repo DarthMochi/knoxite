@@ -76,7 +76,7 @@ func (backend *HTTPStorage) Protocols() []string {
 
 // Description returns a user-friendly description for this backend.
 func (backend *HTTPStorage) Description() string {
-	return "knoxite Server Storage"
+	return "knoxite server storage"
 }
 
 // AvailableSpace returns the free space on this backend.
@@ -148,6 +148,10 @@ func (backend *HTTPStorage) ReadFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("file not found")
+	}
 	defer resp.Body.Close()
 
 	return ioutil.ReadAll(resp.Body)
@@ -180,11 +184,18 @@ func (backend *HTTPStorage) WriteFile(path string, data []byte) (size uint64, er
 	request.Header.Set("Path", path)
 	request.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
 
-	_, err = httpClient.Do(request)
+	response, err := httpClient.Do(request)
 	if err != nil {
 		return 0, err
 	}
-	return uint64(len(data)), nil
+	defer response.Body.Close()
+	var file struct {
+		Path string
+		Size int64
+	}
+	json.NewDecoder(response.Body).Decode(&file)
+
+	return uint64(file.Size), nil
 }
 
 func (backend *HTTPStorage) DeleteFile(path string) error {
@@ -192,11 +203,12 @@ func (backend *HTTPStorage) DeleteFile(path string) error {
 		Timeout: time.Second * 10,
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, backend.url.String()+"/delete/"+path, nil)
+	req, err := http.NewRequest(http.MethodDelete, backend.url.String()+"/delete", nil)
 	if err != nil {
 		return knoxite.ErrInvalidRepositoryURL
 	}
 	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+	req.Header.Set("Path", path)
 	_, err = httpClient.Do(req)
 	if err != nil {
 		return err
