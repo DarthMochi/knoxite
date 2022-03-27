@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gorilla/mux"
 	"github.com/knoxite/knoxite/cmd/server/utils"
 )
 
@@ -28,6 +29,211 @@ var (
 		Name: "Testclient",
 	}
 )
+
+func TestErrors(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+
+	body := url.Values{
+		"name":  {newClient.Name},
+		"quota": []string{"1000000000"},
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	hash, _ := utils.HashPassword(testPassword)
+	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + "1:" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder := httptest.NewRecorder()
+	app.createClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusForbidden {
+		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{}
+
+	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	baseAuthEnc = b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	request.Body = nil
+	app.createClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusInternalServerError {
+		t.Errorf("Want status '%d', got '%d'", http.StatusInternalServerError, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"name":  {newClient.Name},
+		"quota": []string{"100000000000000000000000"},
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.createClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"name":  {newClient.Name},
+		"quota": []string{"1000000000000000"},
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.createClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"name":  {newClient.Name + "/.."},
+		"quota": []string{"1000000000"},
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.createClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Result().StatusCode)
+	}
+
+	createClient(t)
+
+	request = httptest.NewRequest(http.MethodGet, "/clients", nil)
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.getAllClients(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusForbidden {
+		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"id": []string{"1"},
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/clients/1", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.getClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusForbidden {
+		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/clients", nil)
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.getClientByAuthCode(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusForbidden {
+		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"name":  {newClient.Name},
+		"quota": []string{"1000000000"},
+	}
+
+	request = httptest.NewRequest(http.MethodPut, "/clients/1", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.updateClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusForbidden {
+		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"name":  {newClient.Name},
+		"quota": []string{"10000000000000000000000000000000"},
+	}
+
+	request = httptest.NewRequest(http.MethodPut, "/clients/1", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.updateClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"name":  {newClient.Name},
+		"quota": []string{"10000000000000000000"},
+	}
+
+	request = httptest.NewRequest(http.MethodPut, "/clients/1", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.updateClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"name":  {newClient.Name + "/.."},
+		"quota": []string{"1000000000"},
+	}
+
+	request = httptest.NewRequest(http.MethodPut, "/clients", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.updateClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
+		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Result().StatusCode)
+	}
+
+	body = url.Values{
+		"id": []string{"1"},
+	}
+
+	request = httptest.NewRequest(http.MethodDelete, "/clients/1", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.deleteClient(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusForbidden {
+		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
+	}
+
+	request = httptest.NewRequest(http.MethodDelete, "/login", nil)
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
+	responseRecorder = httptest.NewRecorder()
+	app.login(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusUnauthorized {
+		t.Errorf("Want status '%d', got '%d'", http.StatusUnauthorized, responseRecorder.Result().StatusCode)
+	}
+}
 
 func TestCreateClient(t *testing.T) {
 	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
@@ -246,6 +452,247 @@ func TestFilePathTraversal(t *testing.T) {
 	app.upload(responseRecorder, request)
 	if responseRecorder.Result().StatusCode != http.StatusBadRequest {
 		t.Errorf("Want status '%d', got '%d'", http.StatusBadRequest, responseRecorder.Code)
+	}
+}
+
+func TestGetAllClients(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	request := httptest.NewRequest(http.MethodDelete, "/clients", nil)
+	hash, _ := utils.HashPassword(testPassword)
+	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder := httptest.NewRecorder()
+	app.getAllClients(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusOK {
+		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
+	}
+
+	var jsonBody []Client
+	err = json.NewDecoder(responseRecorder.Body).Decode(&jsonBody)
+	if err != nil {
+		t.Errorf("unexpected error when parsing body to json, failed with: %v", err)
+	}
+
+	if len(jsonBody) == 0 {
+		t.Errorf("clients are empty, there should be at least one")
+	}
+}
+
+func TestGetClient(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	body := map[string]string{
+		"id": "1",
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/clients", nil)
+	hash, _ := utils.HashPassword(testPassword)
+	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder := httptest.NewRecorder()
+	request = mux.SetURLVars(request, body)
+	app.getClient(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusOK {
+		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
+	}
+
+	var jsonClient Client
+	err = json.NewDecoder(responseRecorder.Body).Decode(&jsonClient)
+	if err != nil {
+		t.Errorf("unexpected error when parsing body to json, failed with: %v", err)
+	}
+
+	if jsonClient.ID != 1 {
+		t.Errorf("got wrong client")
+	}
+}
+
+func TestGetClientByAuthCode(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	request := httptest.NewRequest(http.MethodGet, "/getClientByAuthCode", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder := httptest.NewRecorder()
+	app.getClientByAuthCode(responseRecorder, request)
+	if responseRecorder.Result().StatusCode != http.StatusOK {
+		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
+	}
+
+	bodyBytes, err := io.ReadAll(responseRecorder.Body)
+	if err != nil {
+		t.Errorf("unexpected error when reading body, failed with: %v", err)
+	}
+
+	var jsonClient Client
+	err = json.Unmarshal(bodyBytes, &jsonClient)
+	if err != nil {
+		t.Errorf("unexpected error when parsing body to json, failed with: %v", err)
+	}
+
+	if jsonClient.ID != 1 {
+		t.Errorf("got wrong client")
+	}
+}
+
+func TestUpdateClient(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	body := url.Values{
+		"name":  []string{"another_testname"},
+		"quota": []string{"100000000"},
+	}
+
+	request := httptest.NewRequest(http.MethodPut, "/clients", strings.NewReader(body.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	hash, _ := utils.HashPassword(testPassword)
+	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder := httptest.NewRecorder()
+
+	vars := map[string]string{
+		"id": "1",
+	}
+	request = mux.SetURLVars(request, vars)
+	app.updateClient(responseRecorder, request)
+	var clients []Client
+	app.DB.Find(&clients)
+
+	updatedClient := &clients[len(clients)-1]
+
+	if responseRecorder.Result().StatusCode != http.StatusNoContent {
+		t.Errorf("Want status '%d', got '%d'", http.StatusNoContent, responseRecorder.Code)
+	}
+
+	if uint64(updatedClient.Quota) != uint64(100000000) {
+		t.Errorf("Failed to update quota, expected '%d', got '%d'", 100000000, newClient.Quota)
+	}
+
+	if updatedClient.Name != "another_testname" {
+		t.Errorf("Failed to update name, expected '%s', got '%s'", "another_testname", newClient.Name)
+	}
+}
+
+func TestDeleteClient(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	request := httptest.NewRequest(http.MethodDelete, "/clients/1", nil)
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	hash, _ := utils.HashPassword(testPassword)
+	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder := httptest.NewRecorder()
+
+	vars := map[string]string{
+		"id": "1",
+	}
+	request = mux.SetURLVars(request, vars)
+	app.deleteClient(responseRecorder, request)
+	var clients []Client
+	app.DB.Find(&clients)
+
+	if responseRecorder.Result().StatusCode != http.StatusNoContent {
+		t.Errorf("Want status '%d', got '%d'", http.StatusNoContent, responseRecorder.Code)
+	}
+
+	if len(clients) != 0 {
+		t.Errorf("Client wasn't removed, expected '%d', got '%d'", 0, len(clients))
+	}
+}
+
+func TestLogin(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	request := httptest.NewRequest(http.MethodDelete, "/login", nil)
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	hash, _ := utils.HashPassword(testPassword)
+	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder := httptest.NewRecorder()
+
+	app.login(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusOK {
+		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
+	}
+}
+
+func TestUserAuth(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	request := httptest.NewRequest(http.MethodDelete, "/testUser", nil)
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	hash, _ := utils.HashPassword(testPassword)
+	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
+	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
+	responseRecorder := httptest.NewRecorder()
+
+	app.testUserAuth(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusOK {
+		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
+	}
+}
+
+func TestClientAuth(t *testing.T) {
+	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer cleanup(testDatabase, testStorage, testConfig)
+	if err != nil {
+		t.Errorf("expected error to be nil, got %v", err)
+	}
+	app.initialize(testDatabase)
+	createClient(t)
+
+	request := httptest.NewRequest(http.MethodDelete, "/testClient", nil)
+	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
+	responseRecorder := httptest.NewRecorder()
+
+	app.testClientAuth(responseRecorder, request)
+
+	if responseRecorder.Result().StatusCode != http.StatusOK {
+		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
 	}
 }
 

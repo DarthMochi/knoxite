@@ -72,8 +72,14 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	name := r.PostFormValue("name")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	client := &Client{
-		Name:     r.PostFormValue("name"),
+		Name:     name,
 		Quota:    quota,
 		AuthCode: generateToken(32),
 	}
@@ -174,7 +180,6 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	}
 
 	vars := mux.Vars(r)
-
 	if err := r.ParseForm(); err != nil {
 		fmt.Println("failed in ParseForm() call")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -182,7 +187,7 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var oldClient Client
-	a.DB.Model(&oldClient).Where("id = ?", vars["id"])
+	a.DB.First(&oldClient, vars["id"])
 
 	oldName := oldClient.Name
 
@@ -215,6 +220,7 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 
 	err = os.Rename(filepath.Join("/", cfg.StoragesPath, oldName), filepath.Join("/", cfg.StoragesPath, client.Name))
 	if err != nil {
+		fmt.Println(err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -223,6 +229,7 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
 func (a *App) deleteClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
 		w.WriteHeader(http.StatusForbidden)
@@ -321,12 +328,11 @@ func init() {
 }
 
 // curl -H "Authorization: Bearer 9b1610f4cb673feeee90fb9c8cfed2422caa6f6478dee79c3a54b72ffddae1f2" http://localhost:42024/testClient
-
 func (a *App) testClientAuth(w http.ResponseWriter, r *http.Request) {
-	if client, err := a.authenticateClient(w, r); err != nil {
-		fmt.Fprintf(w, "error")
+	if _, err := a.authenticateClient(w, r); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
 	} else {
-		fmt.Fprintf(w, "Client name is: %s", client.Name)
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -352,12 +358,11 @@ func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Clien
 // output: YWJjOjEyMw==
 // Set Header and you are good to go
 // curl -H "Authorization: Basic YWJjOjEyMw==" http://localhost:42024/testUser
-
 func (a *App) testUserAuth(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
-		fmt.Fprintf(w, "error")
+		w.WriteHeader(http.StatusUnauthorized)
 	} else {
-		fmt.Fprintf(w, "User name authenticated")
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -474,7 +479,6 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("Serving file: ", r.URL.Path[10:])
 	data, err := a.DownloadFile(*client, r.URL.Path[10:])
-	fmt.Println(err)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
