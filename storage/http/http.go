@@ -13,6 +13,7 @@ package http
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -79,6 +80,24 @@ func (backend *HTTPStorage) Description() string {
 	return "knoxite server storage"
 }
 
+func (backend *HTTPStorage) getHTTPClient() *http.Client {
+	if backend.url.Scheme == "https" {
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // <--- Problem
+		}
+		client := &http.Client{
+			Transport: tr,
+			Timeout:   time.Second * 10,
+		}
+		return client
+	} else {
+		client := &http.Client{
+			Timeout: time.Second * 10,
+		}
+		return client
+	}
+}
+
 // AvailableSpace returns the free space on this backend.
 func (backend *HTTPStorage) AvailableSpace() (uint64, error) {
 	client, err := backend.GetClientInfo()
@@ -90,11 +109,9 @@ func (backend *HTTPStorage) AvailableSpace() (uint64, error) {
 }
 
 func (backend *HTTPStorage) CreatePath(path string) error {
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
-	}
+	var httpClient = backend.getHTTPClient()
 
-	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/mkdir/"+path, nil)
+	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/mkdir"+path, nil)
 	if err != nil {
 		return knoxite.ErrInvalidRepositoryURL
 	}
@@ -108,9 +125,7 @@ func (backend *HTTPStorage) CreatePath(path string) error {
 }
 
 func (backend *HTTPStorage) Stat(path string) (uint64, error) {
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
-	}
+	var httpClient = backend.getHTTPClient()
 
 	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/stat/"+path, nil)
 	if err != nil {
@@ -135,9 +150,7 @@ func (backend *HTTPStorage) Stat(path string) (uint64, error) {
 }
 
 func (backend *HTTPStorage) ReadFile(path string) ([]byte, error) {
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
-	}
+	var httpClient = backend.getHTTPClient()
 
 	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/download/"+path, nil)
 	if err != nil {
@@ -158,9 +171,7 @@ func (backend *HTTPStorage) ReadFile(path string) ([]byte, error) {
 }
 
 func (backend *HTTPStorage) WriteFile(path string, data []byte) (size uint64, err error) {
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
-	}
+	var httpClient = backend.getHTTPClient()
 
 	body := new(bytes.Buffer)
 	writer := multipart.NewWriter(body)
@@ -199,9 +210,7 @@ func (backend *HTTPStorage) WriteFile(path string, data []byte) (size uint64, er
 }
 
 func (backend *HTTPStorage) DeleteFile(path string) error {
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
-	}
+	var httpClient = backend.getHTTPClient()
 
 	req, err := http.NewRequest(http.MethodDelete, backend.url.String()+"/delete", nil)
 	if err != nil {
@@ -218,9 +227,7 @@ func (backend *HTTPStorage) DeleteFile(path string) error {
 }
 
 func (backend *HTTPStorage) GetClientInfo() (BackendClient, error) {
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
-	}
+	var httpClient = backend.getHTTPClient()
 
 	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/getClientByAuthCode", nil)
 	if err != nil {
@@ -243,9 +250,8 @@ func (backend *HTTPStorage) GetClientInfo() (BackendClient, error) {
 
 // LoadChunkIndex reads the chunk-index.
 func (backend *HTTPStorage) LoadChunkIndex() ([]byte, error) {
-	var httpClient = &http.Client{
-		Timeout: time.Second * 10,
-	}
+
+	var httpClient = backend.getHTTPClient()
 
 	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/download/chunks/index", nil)
 	if err != nil {
@@ -267,16 +273,13 @@ func (backend *HTTPStorage) LoadChunkIndex() ([]byte, error) {
 
 // SaveChunkIndex stores the chunk-index.
 func (backend *HTTPStorage) SaveChunkIndex(data []byte) error {
-	httpClient := &http.Client{
-		Timeout: time.Second * 10,
-	}
+	httpClient := backend.getHTTPClient()
 	bodyBuf := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(bodyBuf)
 
 	// this step is very important
 	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", "chunkindex")
 	if err != nil {
-		fmt.Println("error writing to buffer")
 		return err
 	}
 

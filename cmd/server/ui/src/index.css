@@ -1,0 +1,131 @@
+body {
+  background-color: #293133;
+}
+
+.white-font {
+  color: #fff;
+}
+
+.vertical-center {
+  min-height: 100%;  /* Fallback for browsers do NOT support vh unit */
+  min-height: 100vh; /* These two lines are counted as one :-)       */
+
+  display: flex;
+  align-items: center;
+}
+
+.loading {
+  position: absolute;
+  width: 250px;
+  height: 250px;
+  top: 50%;
+  left: 50%;
+  font-size: 24px;
+  margin-left: -125px;
+  margin-top: -125px;
+  background-color: rgb(5, 5, 5);
+  padding: 2px 10px;
+  color: white;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  font-weight: bold;
+}
+
+.loading-spinner {
+  height: 72px;
+  margin: 0px auto;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.spinner {
+  animation: spin infinite 1s linear;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+.progress-cell {
+  vertical-align: middle !important;
+}
+
+.progress {
+  height: 100%;
+}
+
+.progress-bar {
+  height: 36px;
+}
+
+.progress-bar-label {
+  margin: 0px auto;
+  color: black;
+  font-weight: bold;
+  font-size: var(--bs-body-font-size);
+  line-height: 36px;
+}
+
+.quota-label-wrapper {
+  display: block;
+  font-weight: bold;
+  width: 100%;
+}
+
+.quota-value {
+  margin: 0px auto;
+  width: 200px;
+}
+
+.slider-input-label {
+  padding-left: 10px;
+  padding-top: 6px;
+}
+
+.slider-input {
+  width: 100px;
+  text-align: right;
+  float: left;
+  padding-right: 0.76rem;
+}
+
+#tutorial {
+  max-width: 980px;
+  font-family: "Liberation Sans", sans-serif;
+  --font-family-sans-serif: "-apple-system,BlinkMacSystemFont,segoe ui,Roboto,helvetica neue,Arial,noto sans,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol,noto color emoji";
+  --font-family-monospace: "SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace";
+}
+
+#tutorial p {
+  margin-bottom: 1rem;
+}
+
+#tutorial h1, h2, h3 {
+  margin-bottom: 0.5rem;
+}
+
+.code-block {
+  padding: 12px;
+  background: #343a40;
+  color: #f8f9fa;
+  margin-bottom: 1rem;
+}
+
+.code-block pre {
+  white-space: -moz-pre-wrap;
+  white-space: -pre-wrap;
+  white-space: -o-pre-wrap;
+  white-space: pre-wrap; 
+  word-wrap: break-word;
+}
+
+.code-block-copy {
+  float: right;
+}

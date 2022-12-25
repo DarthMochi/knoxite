@@ -5,7 +5,7 @@
 package main
 
 import (
-	"os"
+	"path/filepath"
 
 	"golang.org/x/sys/unix"
 )
@@ -13,12 +13,9 @@ import (
 func (statOS *StatOS) GetAvailableStorageSpace() (uint64, error) {
 	var stat unix.Statfs_t
 
-	wd, err := os.Getwd()
-	if err != nil {
-		return 0, err
-	}
-	err = unix.Statfs(wd, &stat)
-	if err != nil {
+	wd := filepath.Join(cfg.StoragesPath)
+
+	if err := unix.Statfs(wd, &stat); err != nil {
 		return 0, err
 	}
 

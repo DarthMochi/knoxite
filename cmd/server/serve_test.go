@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -653,49 +652,6 @@ func TestLogin(t *testing.T) {
 	}
 }
 
-func TestUserAuth(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
-	if err != nil {
-		t.Errorf("expected error to be nil, got %v", err)
-	}
-	app.initialize(testDatabase)
-	createClient(t)
-
-	request := httptest.NewRequest(http.MethodDelete, "/testUser", nil)
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	hash, _ := utils.HashPassword(testPassword)
-	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
-	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
-	responseRecorder := httptest.NewRecorder()
-
-	app.testUserAuth(responseRecorder, request)
-
-	if responseRecorder.Result().StatusCode != http.StatusOK {
-		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
-	}
-}
-
-func TestClientAuth(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
-	if err != nil {
-		t.Errorf("expected error to be nil, got %v", err)
-	}
-	app.initialize(testDatabase)
-	createClient(t)
-
-	request := httptest.NewRequest(http.MethodDelete, "/testClient", nil)
-	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
-	responseRecorder := httptest.NewRecorder()
-
-	app.testClientAuth(responseRecorder, request)
-
-	if responseRecorder.Result().StatusCode != http.StatusOK {
-		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
-	}
-}
-
 func uploadTestFileRequest(t *testing.T, testfile string) httptest.ResponseRecorder {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -709,7 +665,7 @@ func uploadTestFileRequest(t *testing.T, testfile string) httptest.ResponseRecor
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
-	bytes, err := ioutil.ReadAll(file)
+	bytes, err := io.ReadAll(file)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}

@@ -7,24 +7,25 @@ import {
     Nav,
     Container
 } from 'react-bootstrap';
+import { useAuth } from "./AuthProvider";
 
-const Navigation = (props) => {
-    const logout = props.logout;
+const Navigation = () => {
+    const { onLogout } = useAuth();
     return (
-        <Navbar bg="light" expand="md">
-            <Container fluid>
-                <Navbar.Brand><img src={logo} width={50} className="d-inline-block align-top" alt="" /></Navbar.Brand>
-                <Navbar.Toggle aria-controls="basic-navbar-nav" />
-                <Navbar.Collapse id="basic-navbar-nav">
-                    <Nav className="me-auto"></Nav>
-                    <Nav className="justify-content-end">
-                        <Nav.Link onClick={logout}>
-                            <FontAwesomeIcon icon={faSignOutAlt} />
-                        </Nav.Link>
-                    </Nav>
-                </Navbar.Collapse>
-            </Container>
-        </Navbar>
+      <Navbar>
+        <Container fluid>
+          <Navbar.Brand><img src={logo} width={80} className="d-inline-block align-top" alt="" /></Navbar.Brand>
+          <Navbar.Toggle aria-controls="basic-navbar-nav" />
+          <Navbar.Collapse id="basic-navbar-nav">
+            <Nav className="me-auto"></Nav>
+            <Nav className="justify-content-end">
+              <Nav.Link onClick={onLogout}>
+                <FontAwesomeIcon className="white-font" size="lg" icon={faSignOutAlt} />
+              </Nav.Link>
+            </Nav>
+          </Navbar.Collapse>
+        </Container>
+      </Navbar>
     );    
 }
 

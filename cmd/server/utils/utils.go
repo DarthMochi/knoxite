@@ -5,6 +5,8 @@ package utils
 
 import (
 	"fmt"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -16,6 +18,17 @@ import (
 func Exist(file string) bool {
 	_, err := os.Stat(file)
 	return err == nil
+}
+
+func ParseClientURL(clientId uint) (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("/clients/%d", clientId))
+}
+
+func LogRequest(r *http.Request) string {
+	logString := r.Method
+	logString += " " + r.URL.String()
+	logString += " from " + r.RemoteAddr
+	return logString
 }
 
 func PathToUrl(u string) (*url.URL, error) {
@@ -71,17 +84,17 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func ByteArrDiff(original, new []byte) (int64, error) {
+func ByteArrDiff(original, new []byte) int64 {
 	fmt.Println("new chunk size: ", len(new))
 	fmt.Println("old chunk size: ", len(original))
 	// Checks, if new byte array is initialized.
 	if (new == nil) || len(new) < 1 {
-		return 0, fmt.Errorf("no bytes can be written")
+		return int64(len(new))
 	}
 
 	// Checks, if original byte array is empty and returns the length of the new byte array, if original is empty.
 	if (original == nil) || len(original) < 1 {
-		return int64(len(new)), nil
+		return int64(len(new))
 	}
 
 	smallerArr := original
@@ -104,7 +117,7 @@ func ByteArrDiff(original, new []byte) (int64, error) {
 
 	diff -= int64(lenO) - int64(lenN)
 
-	return diff, nil
+	return diff
 }
 
 func Abs(x int64) int64 {
@@ -113,4 +126,21 @@ func Abs(x int64) int64 {
 	}
 
 	return x
+}
+
+// GetLocalIP returns the non loopback local IP of the host
+func GetLocalIP() net.IP {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	for _, address := range addrs {
+		// check the address type and if it is not a loopback the display it
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP
+			}
+		}
+	}
+	return nil
 }

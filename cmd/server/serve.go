@@ -7,8 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +18,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/knoxite/knoxite/cmd/server/config"
 	"github.com/knoxite/knoxite/cmd/server/utils"
+	"github.com/miekg/dns"
 	"github.com/spf13/cobra"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -36,7 +36,7 @@ type FileStat struct {
 func (a *App) initialize(dbURI string) error {
 	db, err := gorm.Open(sqlite.Open(dbURI))
 	if err != nil {
-		return fmt.Errorf("failed to connect database")
+		return err
 	}
 	a.DB = db
 	return nil
@@ -44,39 +44,38 @@ func (a *App) initialize(dbURI string) error {
 
 func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
-		fmt.Println("user not authorized")
+		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		fmt.Println("failed in ParseForm()")
+		WarningLogger.Println(errInvalidBody)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	quota, err := strconv.ParseUint(r.PostFormValue("quota"), 10, 64)
 	if err != nil {
+		WarningLogger.Println(err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	availableSpace, err := a.AvailableSpace()
 	if err != nil {
+		WarningLogger.Println(err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	if quota > availableSpace {
+		WarningLogger.Println(errNoSpace)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	name := r.PostFormValue("name")
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
 
 	client := &Client{
 		Name:     name,
@@ -85,26 +84,27 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.Contains(client.Name, "..") {
+		WarningLogger.Println(errInvalidURL)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	a.DB.Create(client)
 
-	storagePath := filepath.Join(cfg.StoragesPath, client.Name, "chunks", "empty")
+	storagePath := filepath.Join(cfg.StoragesPath, client.Name)
 	cfgDir := filepath.Dir(storagePath)
 	if !utils.Exist(cfgDir) {
 		if err := os.MkdirAll(cfgDir, 0755); err != nil {
-			fmt.Println("failed to create storage path for client")
+			WarningLogger.Println(errNoPath)
 			w.WriteHeader(http.StatusInternalServerError)
 			a.DB.Delete(client)
 			return
 		}
 	}
 
-	u, err := url.Parse(fmt.Sprintf("/clients/%d", client.ID))
+	u, err := utils.ParseClientURL(client.ID)
 	if err != nil {
-		fmt.Println("failed to form a new client URL")
+		WarningLogger.Println(errInvalidURL)
 		w.WriteHeader(http.StatusInternalServerError)
 		os.RemoveAll(cfgDir)
 		a.DB.Delete(client)
@@ -112,7 +112,7 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 	}
 	base, err := url.Parse(r.URL.String())
 	if err != nil {
-		fmt.Println("failed to parse request URL")
+		WarningLogger.Println(errInvalidURL)
 		w.WriteHeader(http.StatusInternalServerError)
 		os.RemoveAll(cfgDir)
 		a.DB.Delete(client)
@@ -124,7 +124,7 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) getAllClients(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
-		fmt.Println("user not authorized")
+		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -143,7 +143,7 @@ func (a *App) getAllClients(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) getClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
-		fmt.Println("user not authorized")
+		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -158,15 +158,31 @@ func (a *App) getClient(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(clientJSON))
 }
 
-func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
-	if err != nil {
-		fmt.Println("client not authorized")
+func (a *App) getClientByName(w http.ResponseWriter, r *http.Request) {
+	if err := a.authenticateUser(w, r); err != nil {
+		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
-	fmt.Printf("%+v\n", client)
+	var client Client
+	vars := mux.Vars(r)
+
+	a.DB.First(&client, "name = ?", vars["name"])
+	clientJSON, _ := json.Marshal(client)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(clientJSON))
+}
+
+func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
+	client, err := a.authenticateClient(w, r)
+	if err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	clientJSON, _ := json.Marshal(client)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(clientJSON))
@@ -174,14 +190,14 @@ func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
-		fmt.Println("user not authorized")
+		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	vars := mux.Vars(r)
 	if err := r.ParseForm(); err != nil {
-		fmt.Println("failed in ParseForm() call")
+		WarningLogger.Println(errInvalidBody)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -218,13 +234,15 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = os.Rename(filepath.Join("/", cfg.StoragesPath, oldName), filepath.Join("/", cfg.StoragesPath, client.Name))
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	cfgDir := filepath.Dir(filepath.Join("/", cfg.StoragesPath, client.Name))
+	if !utils.Exist(cfgDir) {
+		err = os.Rename(filepath.Join("/", cfg.StoragesPath, oldName), filepath.Join("/", cfg.StoragesPath, client.Name))
+		if err != nil {
+			WarningLogger.Println(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
-
 	a.DB.Model(&client).Where("id = ?", vars["id"]).Updates(&client)
 
 	w.WriteHeader(http.StatusNoContent)
@@ -242,7 +260,7 @@ func (a *App) deleteClient(w http.ResponseWriter, r *http.Request) {
 	a.DB.First(&client, "id = ?", vars["id"])
 	os.RemoveAll(filepath.Join(cfg.StoragesPath, client.Name))
 
-	a.DB.Delete(&Client{}, vars["id"])
+	a.DB.Unscoped().Delete(&client)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -254,6 +272,30 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (a *App) totalAvailableStorageSize(w http.ResponseWriter, r *http.Request) {
+	if err := a.authenticateUser(w, r); err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	size, err := a.AvailableSpace()
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	sizeJSON, err := json.Marshal(size)
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(sizeJSON))
 }
 
 func generateToken(length int) string {
@@ -268,52 +310,87 @@ var (
 	serveCmd = &cobra.Command{
 		Use: "serve",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			InitLogger()
 			a := &App{}
 			u, err := utils.PathToUrl(cfgFileName)
 			if err != nil {
-				return fmt.Errorf("config path isn't a valid url")
+				ErrorLogger.Println("config path isn't a valid url")
+				return err
 			}
 
 			err = cfg.Load(u)
 			if err != nil {
-				return fmt.Errorf("couldn't load config file")
+				ErrorLogger.Println("couldn't load config file")
+				return err
 			}
 
 			err = a.initialize(cfg.DBFileName)
 			if err != nil {
+				ErrorLogger.Println("failed to connect database")
 				return err
 			}
 
+			if cfg.UseHostname {
+				hostname, err := os.Hostname()
+				if err != nil {
+					ErrorLogger.Println("hostname couldn't be retrieved")
+					return err
+				}
+
+				r := new(dns.A)
+				r.Hdr = dns.RR_Header{Name: hostname + ".", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 3600}
+				r.A = utils.GetLocalIP()
+				if err != nil {
+					ErrorLogger.Println("dns couldn't be setup")
+					return err
+				}
+			}
+
+			InfoLogger.Println("starting server")
 			router := mux.NewRouter()
-			// router.Handle("/webui/", http.StripPrefix("/webui/", http.FileServer(http.Dir(filepath.Join("ui", "build")))))
-			router.HandleFunc("/login", a.login)
+
+			router.HandleFunc("/login", a.login).Methods("POST")
 			router.HandleFunc("/clients", a.createClient).Methods("POST")
 			router.HandleFunc("/clients", a.getAllClients).Methods("GET", "OPTIONS")
 			router.HandleFunc("/clients/{id}", a.getClient).Methods("GET")
+			router.HandleFunc("/clients/{name}", a.getClientByName).Methods("GET")
 			router.HandleFunc("/clients/{id}", a.updateClient).Methods("PUT")
 			router.HandleFunc("/clients/{id}", a.deleteClient).Methods("DELETE")
-			router.HandleFunc("/testUser", a.testUserAuth).Methods("GET")
+			router.HandleFunc("/storage_size", a.totalAvailableStorageSize).Methods("GET")
 
-			fmt.Println("starting server")
 			router.HandleFunc("/upload", a.upload).Methods("POST")
 			router.PathPrefix("/download/").HandlerFunc(a.download).Methods("GET")
-			router.PathPrefix("/size/").HandlerFunc(a.getFileStats).Methods("GET")
+			router.PathPrefix("/stat/").HandlerFunc(a.getFileStats).Methods("GET")
 			router.PathPrefix("/mkdir/").HandlerFunc(a.mkdir).Methods("GET")
 			router.PathPrefix("/delete").HandlerFunc(a.delete).Methods("DELETE")
 			router.HandleFunc("/getClientByAuthCode", a.getClientByAuthCode).Methods("GET")
-			router.HandleFunc("/testClient", a.testClientAuth).Methods("GET")
-
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			if os.Getenv("APP_ENV") == "production" {
+				fsWebUI := http.FileServer(http.Dir(filepath.Join(wd, "cmd", "server", "ui", "build")))
+				router.PathPrefix("/").Handler(http.StripPrefix("/", fsWebUI)).Methods("GET")
+			}
+			router.Use(loggingMiddleware)
 			http.Handle("/", router)
-			// To show available routes (for development)
 			router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
 				tpl, err1 := route.GetPathTemplate()
 				met, err2 := route.GetMethods()
-				fmt.Println(tpl, err1, met, err2)
+				InfoLogger.Println(tpl, err1, met, err2)
 				return nil
 			})
-			err = http.ListenAndServe(":"+cfg.AdminUIPort, nil)
+			if cfg.UseHTTPS {
+				certsDir := filepath.Join(wd, "cmd", "server", "certs")
+				certPem := filepath.Join(certsDir, "cert.pem")
+				keyPem := filepath.Join(certsDir, "key.pem")
+				err = http.ListenAndServeTLS(":"+cfg.AdminUIPort, certPem, keyPem, router)
+			} else {
+				err = http.ListenAndServe(":"+cfg.AdminUIPort, nil)
+			}
 			if err != nil {
-				return fmt.Errorf("port occupied")
+				ErrorLogger.Println("port occupied")
+				return err
 			}
 			return nil
 		},
@@ -322,59 +399,47 @@ var (
 	cfgFileName string
 )
 
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		InfoLogger.Println(utils.LogRequest(r))
+		next.ServeHTTP(w, r)
+	})
+}
+
 func init() {
 	serveCmd.PersistentFlags().StringVarP(&cfgFileName, "configURL", "C", config.DefaultPath(), "Path to configuration file")
 	RootCmd.AddCommand(serveCmd)
-}
-
-// curl -H "Authorization: Bearer 9b1610f4cb673feeee90fb9c8cfed2422caa6f6478dee79c3a54b72ffddae1f2" http://localhost:42024/testClient
-func (a *App) testClientAuth(w http.ResponseWriter, r *http.Request) {
-	if _, err := a.authenticateClient(w, r); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-	} else {
-		w.WriteHeader(http.StatusOK)
-	}
 }
 
 func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Client, error) {
 	authTokenHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
 
 	if len(authTokenHeader) < 2 {
-		return nil, fmt.Errorf("no authorization was given")
+		WarningLogger.Println(errNoAuth)
+		return nil, errNoAuth
 	}
 
 	authToken := authTokenHeader[1]
 
 	client := &Client{}
 	if err := a.DB.First(client, Client{AuthCode: authToken}).Error; err != nil {
-		return nil, fmt.Errorf(err.Error())
+		WarningLogger.Println(err)
+		return nil, err
 	}
 	return client, nil
-}
-
-// Example - username: abc, password: 123
-// Encode username and password, format for BasicAuth: "username:password", -n flag for echo needs to be set, to get rid of the \n
-// echo -n "abc:123" | base64
-// output: YWJjOjEyMw==
-// Set Header and you are good to go
-// curl -H "Authorization: Basic YWJjOjEyMw==" http://localhost:42024/testUser
-func (a *App) testUserAuth(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-	} else {
-		w.WriteHeader(http.StatusOK)
-	}
 }
 
 func (a *App) authenticateUser(w http.ResponseWriter, r *http.Request) error {
 	u, p, ok := r.BasicAuth()
 
 	if !ok {
-		return fmt.Errorf("security alert: no auth set")
+		WarningLogger.Println(errNoAuth)
+		return errNoAuth
 	}
 
 	if u != cfg.AdminUserName || utils.CheckPasswordHash(p, cfg.AdminPassword) {
-		return fmt.Errorf("security alert: authentication failed")
+		WarningLogger.Println(errNoAuth)
+		return errNoAuth
 	}
 
 	return nil
@@ -382,23 +447,24 @@ func (a *App) authenticateUser(w http.ResponseWriter, r *http.Request) error {
 
 // upload logic.
 func (a *App) upload(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Receiving upload")
-
 	client, err := a.authenticateClient(w, r)
 
 	if r.Method != "POST" || err != nil {
+		WarningLogger.Println(errInvalidURL)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	urlPath := r.Header.Get("Path")
 	if len(r.URL.Path) < 1 {
+		WarningLogger.Println(errInvalidHeader)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	err = r.ParseMultipartForm(32 << 20)
 	if err != nil {
+		WarningLogger.Println(errInvalidBody)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -406,6 +472,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	fileContent := r.FormValue("uploadfile")
 	diff, err := a.UploadFile(*client, urlPath, fileContent)
 	if err != nil {
+
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -423,33 +490,38 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 func (a *App) UploadFile(client Client, filePath string, fileContent string) (int64, error) {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
-		return 0, fmt.Errorf("invalid url")
+		WarningLogger.Println(errInvalidURL)
+		return 0, errInvalidURL
 	}
 	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
+		WarningLogger.Println(err)
 		return 0, err
 	}
 	defer f.Close()
 
 	if (client.Quota - client.UsedSpace) < uint64(len([]byte(fileContent))) {
-		return 0, fmt.Errorf("client storage space used up")
+		WarningLogger.Println(errNoSpace)
+		return 0, errNoSpace
 	}
 
 	fileinfo, err := f.Stat()
 	if err != nil {
-		return 0, fmt.Errorf("couldn't read file information")
+		WarningLogger.Println(errInvalidBody)
+		return 0, err
 	}
 
 	buf := make([]byte, fileinfo.Size())
 	f.Read(buf)
-	diff, err := utils.ByteArrDiff(buf, []byte(fileContent))
-	if err != nil {
-		return 0, err
+	diff := utils.ByteArrDiff(buf, []byte(fileContent))
+	if diff == 0 {
+		return diff, nil
 	}
 
 	err = os.WriteFile(path, []byte(fileContent), 0600)
 	if err != nil {
+		WarningLogger.Println(err)
 		return 0, err
 	}
 	if utils.Abs(int64(client.UsedSpace)-diff) < 0 {
@@ -477,7 +549,6 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("Serving file: ", r.URL.Path[10:])
 	data, err := a.DownloadFile(*client, r.URL.Path[10:])
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -491,16 +562,22 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 func (a *App) DownloadFile(client Client, filePath string) ([]byte, error) {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
-		return nil, fmt.Errorf("invalid url")
+		WarningLogger.Println(errInvalidURL)
+		return nil, errInvalidURL
 	}
 	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
 	if !utils.Exist(path) {
-		return nil, fmt.Errorf("path not found")
+		WarningLogger.Println(errNoPath)
+		return nil, errNoPath
 	}
 
 	f, err := os.OpenFile(path, os.O_RDONLY, 0600)
+	if err != nil {
+		WarningLogger.Println(err)
+		return nil, err
+	}
 
-	return ioutil.ReadAll(f)
+	return io.ReadAll(f)
 }
 
 func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
@@ -534,14 +611,16 @@ func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
 func stat(client Client, filePath string) (FileStat, error) {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
-		return FileStat{}, fmt.Errorf("ERROR: Invalid url")
+		WarningLogger.Println(errInvalidURL)
+		return FileStat{}, errInvalidURL
 	}
 	var file FileStat
 	file.Path = filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
 
 	osFile, err := os.Stat(file.Path)
 	if err != nil {
-		return FileStat{}, fmt.Errorf("ERROR: %v", err)
+		WarningLogger.Println(err)
+		return FileStat{}, err
 	}
 	file.Size = osFile.Size()
 
@@ -554,7 +633,6 @@ func (a *App) mkdir(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
-	fmt.Printf("%v\n", r.URL.Path)
 	if len(r.URL.Path) < 7 {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -572,13 +650,15 @@ func (a *App) mkdir(w http.ResponseWriter, r *http.Request) {
 func mkDir(client Client, dirPath string) error {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", dirPath))
 	if err != nil || strings.Contains(dirPath, "..") {
-		return fmt.Errorf("ERROR: Invalid url")
+		WarningLogger.Println(errInvalidURL)
+		return errInvalidURL
 	}
 	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", dirPath))
 
 	if !utils.Exist(path) {
 		if err := os.MkdirAll(path, 0755); err != nil {
-			return fmt.Errorf("ERROR: %v", err)
+			WarningLogger.Println(err)
+			return err
 		}
 	}
 
@@ -610,22 +690,26 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 func (a *App) DeleteFile(client Client, filePath string) error {
 	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
 	if err != nil || strings.Contains(filePath, "..") {
-		return fmt.Errorf("ERROR: Invalid url")
+		WarningLogger.Println(errInvalidURL)
+		return errInvalidURL
 	}
 	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
 
 	stats, err := os.Stat(path)
 	if err != nil {
-		return fmt.Errorf("ERROR: %v", err)
+		WarningLogger.Println(err)
+		return err
 	}
 
 	if stats.IsDir() {
-		return fmt.Errorf("ERROR: can't delete folders")
+		WarningLogger.Println(errNoPath)
+		return errNoPath
 	}
 
 	if utils.Exist(path) {
 		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("ERROR: %v", err)
+			WarningLogger.Println(errCantDelete)
+			return errCantDelete
 		}
 	}
 
