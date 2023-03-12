@@ -59,6 +59,11 @@ body {
 
 .progress {
   height: 100%;
+  text-align: center;
+  color: black;
+  font-weight: bold;
+  font-size: var(--bs-body-font-size);
+  line-height: 36px;
 }
 
 .progress-bar {
@@ -67,10 +72,6 @@ body {
 
 .progress-bar-label {
   margin: 0px auto;
-  color: black;
-  font-weight: bold;
-  font-size: var(--bs-body-font-size);
-  line-height: 36px;
 }
 
 .quota-label-wrapper {

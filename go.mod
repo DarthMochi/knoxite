@@ -46,7 +46,10 @@ require (
 	gorm.io/gorm v1.22.2
 )
 
-require github.com/natefinch/lumberjack v2.0.0+incompatible
+require (
+	github.com/Luzifer/go-openssl/v4 v4.1.0
+	github.com/natefinch/lumberjack v2.0.0+incompatible
+)
 
 require (
 	cloud.google.com/go v0.99.0 // indirect

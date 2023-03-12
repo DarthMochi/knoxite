@@ -1,6 +1,5 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
-import env from "react-dotenv";
 
 const resources = {
   en: {
@@ -26,10 +25,37 @@ const resources = {
         auth_code: "AuthCode",
         quota: "Quota",
         used_space: "Used space",
+        repo_url: "Repository URL",
+        password: "Repository password",
         name_placeholder: "Enter client name",
         created_success: "Client created successfully",
         updated_success: "Client updated successfully",
         deleted_success: "Client created successfully",
+      },
+      volumes: {
+        more: "Volumes",
+        id: "ID",
+        name: "Name",
+        description: "Description",
+      },
+      snapshots: {
+        more: "Snapshots",
+        id: "ID",
+        created_at: "Created at",
+        size: "Size",
+        storage_size: "Storage size",
+        description: "Description",
+      },
+      files: {
+        all: "All Files",
+        more: "Files",
+        mode: "Mode",
+        group: "Group",
+        user: "User",
+        size: "Size",
+        modified: "Modified",
+        name: "Name",
+        no_files_found: "No files in this folder."
       },
       tutorial: {
         h1: "Quick Guide to get knoxited",
@@ -75,6 +101,7 @@ const resources = {
           "The output will look something like this:",
           content3: "CONGRATULATIONS: You have successfully stored data on your knoxite-server",
         },
+        getting_started: "For more information how to get started, visit:",
       },
     },
   },
@@ -87,7 +114,7 @@ i18next
     interpolation: {
       escapeValue: false,
     },
-    debug: env.NODE_ENV === 'development',
+    debug: window.env.NODE_ENV === 'development',
   });
 
 export default i18next;

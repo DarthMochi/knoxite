@@ -1,35 +1,15 @@
-import React, { useEffect, useState } from "react";
-import env from "react-dotenv";
+import React from "react";
 import { Table, Card, Container } from 'react-bootstrap';
 import 'react-rangeslider/lib/index.css';
 import CodeBlock from './CodeBlock';
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
-import { useAuth } from "./AuthProvider";
-import { fetchClient } from "./utils";
 
-const ClientInfo = (props) => {
+const ClientInfo = ({client}) => {
     const { t } = useTranslation();
-    const { id } = useParams();
-    const { token } = useAuth();
-
-    const [clientToken, setClientToken] = useState(null);
-    const hostname = env.ADMIN_HOSTNAME;
-    const port = env.ADMIN_UI_PORT;
-    const protocol = env.SERVER_SCHEME;
-    const repoUrl = protocol + "://" + clientToken + "@" + hostname + ":" + port;
-
-    useEffect(() => {
-      async function load() {
-        if(id) {
-          props.setIsLoading(true);
-          var result = await fetchClient(token, id);
-          setClientToken(result.client.AuthCode);
-          props.setIsLoading(false);
-        }
-      };
-      load();
-    }, [props, id, token, setClientToken]);
+    const hostname = window.env.ADMIN_HOSTNAME;
+    const port = window.env.ADMIN_UI_PORT;
+    const protocol = window.env.SERVER_SCHEME;
+    const repoUrl = protocol + "://" + client.AuthCode + "@" + hostname + (port !== "80" ? ":" + port + "" : "");
 
     return (
       <Container id="tutorial">
@@ -57,7 +37,7 @@ const ClientInfo = (props) => {
                     <b>{t("client.auth_code")}</b>{": "}
                   </td>
                   <td>
-                    {clientToken}
+                    {client.AuthCode}
                   </td>
                 </tr>
                 <tr>
@@ -151,6 +131,9 @@ const ClientInfo = (props) => {
               <span style={{fontSize: "30px"}}>
                 &#10071;&#10071;&#10071;
               </span>
+            </p>
+            <p>
+              {t("tutorial.getting_started")} <a href="https://knoxite.com/docs/getting-started/">Getting Started</a>
             </p>
           </Card.Body>
         </Card>

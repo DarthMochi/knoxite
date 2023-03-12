@@ -4,15 +4,12 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -23,6 +20,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+const timeFormat = "2006-01-02 15:04:05"
 
 type App struct {
 	DB *gorm.DB
@@ -49,73 +48,25 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	base, err := url.Parse(r.URL.String())
+	if err != nil {
+		WarningLogger.Println(errInvalidURL)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		WarningLogger.Println(errInvalidBody)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	quota, err := strconv.ParseUint(r.PostFormValue("quota"), 10, 64)
-	if err != nil {
-		WarningLogger.Println(err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	availableSpace, err := a.AvailableSpace()
-	if err != nil {
-		WarningLogger.Println(err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if quota > availableSpace {
-		WarningLogger.Println(errNoSpace)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
+	quota := r.PostFormValue("quota")
 	name := r.PostFormValue("name")
 
-	client := &Client{
-		Name:     name,
-		Quota:    quota,
-		AuthCode: generateToken(32),
-	}
-
-	if strings.Contains(client.Name, "..") {
-		WarningLogger.Println(errInvalidURL)
+	u, err := NewClient(name, quota, *a)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	a.DB.Create(client)
-
-	storagePath := filepath.Join(cfg.StoragesPath, client.Name)
-	cfgDir := filepath.Dir(storagePath)
-	if !utils.Exist(cfgDir) {
-		if err := os.MkdirAll(cfgDir, 0755); err != nil {
-			WarningLogger.Println(errNoPath)
-			w.WriteHeader(http.StatusInternalServerError)
-			a.DB.Delete(client)
-			return
-		}
-	}
-
-	u, err := utils.ParseClientURL(client.ID)
-	if err != nil {
-		WarningLogger.Println(errInvalidURL)
-		w.WriteHeader(http.StatusInternalServerError)
-		os.RemoveAll(cfgDir)
-		a.DB.Delete(client)
-		return
-	}
-	base, err := url.Parse(r.URL.String())
-	if err != nil {
-		WarningLogger.Println(errInvalidURL)
-		w.WriteHeader(http.StatusInternalServerError)
-		os.RemoveAll(cfgDir)
-		a.DB.Delete(client)
 		return
 	}
 
@@ -202,48 +153,14 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var oldClient Client
-	a.DB.First(&oldClient, vars["id"])
+	clientId := vars["id"]
+	name := r.PostFormValue("name")
+	quota := r.PostFormValue("quota")
 
-	oldName := oldClient.Name
-
-	quota, err := strconv.ParseUint(r.PostFormValue("quota"), 10, 64)
-	if err != nil {
+	if err := UpdateClient(clientId, name, quota, *a); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
-	availableSpace, err := a.AvailableSpace()
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if quota > availableSpace || quota < oldClient.UsedSpace {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	client := &Client{
-		Name:  r.PostFormValue("name"),
-		Quota: quota,
-	}
-
-	if strings.Contains(client.Name, "..") {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	cfgDir := filepath.Dir(filepath.Join("/", cfg.StoragesPath, client.Name))
-	if !utils.Exist(cfgDir) {
-		err = os.Rename(filepath.Join("/", cfg.StoragesPath, oldName), filepath.Join("/", cfg.StoragesPath, client.Name))
-		if err != nil {
-			WarningLogger.Println(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-	}
-	a.DB.Model(&client).Where("id = ?", vars["id"]).Updates(&client)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -296,14 +213,6 @@ func (a *App) totalAvailableStorageSize(w http.ResponseWriter, r *http.Request) 
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(sizeJSON))
-}
-
-func generateToken(length int) string {
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		return ""
-	}
-	return hex.EncodeToString(b)
 }
 
 var (
@@ -369,7 +278,7 @@ var (
 				return err
 			}
 			if os.Getenv("APP_ENV") == "production" {
-				fsWebUI := http.FileServer(http.Dir(filepath.Join(wd, "cmd", "server", "ui", "build")))
+				fsWebUI := http.FileServer(http.Dir(filepath.Join(wd, "ui", "build")))
 				router.PathPrefix("/").Handler(http.StripPrefix("/", fsWebUI)).Methods("GET")
 			}
 			router.Use(loggingMiddleware)
@@ -381,7 +290,7 @@ var (
 				return nil
 			})
 			if cfg.UseHTTPS {
-				certsDir := filepath.Join(wd, "cmd", "server", "certs")
+				certsDir := filepath.Join(wd, "certs")
 				certPem := filepath.Join(certsDir, "cert.pem")
 				keyPem := filepath.Join(certsDir, "key.pem")
 				err = http.ListenAndServeTLS(":"+cfg.AdminUIPort, certPem, keyPem, router)
@@ -494,6 +403,11 @@ func (a *App) UploadFile(client Client, filePath string, fileContent string) (in
 		return 0, errInvalidURL
 	}
 	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
+	if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		WarningLogger.Println(errNoSpace)
+		return 0, err
+	}
+
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		WarningLogger.Println(err)

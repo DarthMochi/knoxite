@@ -38,18 +38,11 @@ type PackageJSON struct {
 	BrowsersList interface{} `json:"browserslist"`
 }
 
-type Client struct {
-	gorm.Model
-	Name      string
-	AuthCode  string
-	Quota     uint64
-	UsedSpace uint64
-}
-
 var (
 	WarningLogger *log.Logger
 	InfoLogger    *log.Logger
 	ErrorLogger   *log.Logger
+	wd            string
 	setupCmd      = &cobra.Command{
 		Use: "setup",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -78,7 +71,7 @@ var (
 			if os.Getenv("APP_ENV") == "production" {
 				if err := initYarnInstallAndBuild(); err != nil {
 					defer os.Remove(cfg.DBFileName)
-					defer os.Remove(filepath.Join("cmd", "server", "ui", "build"))
+					defer os.Remove(filepath.Join(wd, "cmd", "server", "ui", "build"))
 					ErrorLogger.Println(err.Error())
 					return err
 				}
@@ -86,24 +79,16 @@ var (
 
 			if err := initDotEnv(); err != nil {
 				defer os.Remove(cfg.DBFileName)
-				defer os.Remove(filepath.Join("cmd", "server", "ui", "build"))
+				defer os.Remove(filepath.Join(wd, "cmd", "server", "ui", "build"))
 				ErrorLogger.Println(err.Error())
 				return err
 			}
 
 			if cfg.UseHTTPS {
-				wd, err := os.Getwd()
-				if err != nil {
-					defer os.Remove(cfg.DBFileName)
-					defer os.Remove(filepath.Join("cmd", "server", "ui", "build"))
-					ErrorLogger.Println(err.Error())
-					return err
-				}
-
-				certsPath := filepath.Join(wd, "cmd", "server", "certs")
+				certsPath := filepath.Join(wd, "certs")
 				if err := initCerts(certsPath); err != nil {
 					defer os.Remove(cfg.DBFileName)
-					defer os.Remove(filepath.Join("cmd", "server", "ui", "build"))
+					defer os.Remove(filepath.Join(wd, "cmd", "server", "ui", "build"))
 					defer os.Remove(certsPath)
 					ErrorLogger.Println(err.Error())
 					return err
@@ -115,6 +100,8 @@ var (
 )
 
 func init() {
+	wd, _ = os.Getwd()
+
 	setupCmd.PersistentFlags().StringVarP(&cfg.AdminPassword, "password", "p", "", "Admin password")
 	setupCmd.PersistentFlags().StringVarP(&cfg.AdminUserName, "username", "u", "", "Admin username")
 	setupCmd.PersistentFlags().StringVarP(&cfg.DBFileName, "dbfilename", "d", "", "File name for sqlite database")
@@ -163,18 +150,16 @@ func initStoragePath(storageURL string) error {
 		return err
 	}
 
-	cfgDir := filepath.Dir(path.Path)
-	if !utils.Exist(cfgDir) {
-		if err := os.MkdirAll(cfgDir, 0755); err != nil {
-			return err
-		}
+	storageDir := filepath.Join(path.Path)
+	if err := os.MkdirAll(storageDir, 0755); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 func initYarnInstallAndBuild() error {
-	uiFilePath := filepath.Join("cmd", "server", "ui")
+	uiFilePath := filepath.Join(wd, "ui")
 	InfoLogger.Println("Installing yarn packages (this could take a while) ...")
 	cmd := exec.Command("yarn", "install")
 	cmd.Dir = uiFilePath
@@ -386,7 +371,7 @@ func initCerts(certsPath string) error {
 }
 
 func initDotEnv() error {
-	f, err := os.OpenFile(filepath.Join("cmd", "server", "ui", ".env"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(filepath.Join(wd, "cmd", "server", "ui", ".env"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}

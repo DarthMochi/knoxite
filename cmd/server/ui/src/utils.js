@@ -1,9 +1,8 @@
 export const fetchData = async (url, options) => {
     const response = await fetch(url, options);
-    if (!response.ok) {
-        throw new Error(`Error fetching data. Server replied ${response.status}`);
-    }
-    console.log(response);
+    // if (!response.ok) {
+    //     throw new Error(`Error fetching data. Server replied ${response.status}`);
+    // }
     return response;
 };
 
@@ -41,19 +40,13 @@ export const sizeToBytes = (size, sizeLabel) => {
 
 export const convertSizeByStep = (size, steps) => {
   var resultSize = size;
-  console.log("convertSizeByStep");
-  console.log("size: " + size);
-  console.log("steps: " + steps);
   for(var i = 0; i < steps; i++) {
     resultSize = Math.floor(resultSize/1000);
-    console.log("resultSize: " + resultSize);
   }
   return resultSize;
 }
 
 export const sizeConversion = (size, steps) => {
-  console.log("steps: " + steps);
-  console.log("size: " + size);
   if(size < 10000) {
     return [size, stepsToString(steps)];
   }
@@ -94,7 +87,7 @@ export const fetchClient = async (token, id) => {
   return await response.json();
 };
 
-export const fetchClients = async (token) => {
+export const fetchClients = async (navigate, token) => {
   const url = "/clients";
   const options = {
     headers: {
@@ -102,7 +95,12 @@ export const fetchClients = async (token) => {
     },
   };
   const response = await fetchData(url, options);
-  return await response.json();
+  if(response.ok) {
+    return await response.json();
+  } else {
+    navigate("/login");
+    return null;
+  }
 };
 
 export const fetchStorageSize = async (token) => {
@@ -116,7 +114,7 @@ export const fetchStorageSize = async (token) => {
   return await response.json();
 };
 
-export const createClientRequest = async (token, clientName, quota) => {
+export const createClientRequest = async (token, client) => {
   const fetchUrl = "/clients";
   const fetchOptions = {
     method: 'POST',
@@ -124,20 +122,20 @@ export const createClientRequest = async (token, clientName, quota) => {
         'Authorization': 'Basic ' + token,
         'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: "name=" + clientName + "&quota=" + quota,
+    body: "name=" + client.Name + "&quota=" + client.Quota,
   };
   return await fetchData(fetchUrl, fetchOptions);
 };
 
-export const updateClientRequest = async (token, selectedClient, clientName, quota) => {
-  const url = "/clients/" + selectedClient.ID;
+export const updateClientRequest = async (token, client) => {
+  const url = "/clients/" + client.ID;
   const options = {
     method: 'PUT',
     headers: {
       'Authorization': 'Basic ' + token,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: "name=" + clientName + "&quota=" + quota,
+    body: "name=" + client.Name + "&quota=" + client.Quota,
   };
   return await fetchData(url, options);
 };
@@ -152,4 +150,3 @@ export const deleteClientRequest = async (token, client_id) => {
   }
   return await fetchData(fetchUrl, fetchOptions);
 };
-

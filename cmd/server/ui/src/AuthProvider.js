@@ -1,12 +1,23 @@
-import React, { useState, createContext, useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, createContext, useContext, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { fetchData } from "./utils.js";
 
 const AuthContext = createContext(null);
 
-const AuthProvider = ({ children }) => {
+const AuthProvider = ({client, children }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [token, setToken] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if(token) {
+      setToken(token);
+      if(!location.pathname.includes("/admin")) {
+        navigate("/admin/clients");
+      }
+    }
+  }, [navigate, token, location]);
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -25,8 +36,9 @@ const AuthProvider = ({ children }) => {
     fetchData("/login", fetchOptions)
     .then(
       response => {
-        if (response.status === 200) {
+        if (response.ok) {
           setToken(userToken);
+          localStorage.setItem("token", userToken);
           navigate("/admin/clients");
         }
       },
@@ -34,11 +46,13 @@ const AuthProvider = ({ children }) => {
         console.log("Error logging in:", err);
       }
     );
-    }
+  };
 
   const handleLogout = () => {
     setToken(null);
-    navigate("/login");
+    localStorage.removeItem("token");
+    localStorage.removeItem("client");
+    navigate("/admin/login");
   };
 
   const value = {

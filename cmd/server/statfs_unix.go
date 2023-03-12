@@ -14,7 +14,6 @@ func (statOS *StatOS) GetAvailableStorageSpace() (uint64, error) {
 	var stat unix.Statfs_t
 
 	wd := filepath.Join(cfg.StoragesPath)
-
 	if err := unix.Statfs(wd, &stat); err != nil {
 		return 0, err
 	}

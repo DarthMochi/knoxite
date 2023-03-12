@@ -19,11 +19,11 @@ function Login(props) {
           <Form onSubmit={onLogin}>
             <Form.Group className="mb-3" controlId="formBasicName">
               <Form.Label>{t("admin_name")}</Form.Label>
-              <Form.Control type="text" placeholder={t("login.username_placeholder")} name="user" onChange={e => {}} />
+              <Form.Control type="text" placeholder={t("login.username_placeholder")} name="user" />
             </Form.Group>
             <Form.Group className="mb-3" controlId="formBasicPassword">
               <Form.Label>{t("admin_password")}</Form.Label>
-              <Form.Control type="password" placeholder={t("login.password_placeholder")} name="passwd" onChange={e => {}} />
+              <Form.Control type="password" placeholder={t("login.password_placeholder")} name="passwd" />
             </Form.Group>
             <Button variant="success" type="submit" >
               {t("submit")}

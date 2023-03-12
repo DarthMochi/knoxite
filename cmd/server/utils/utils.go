@@ -4,6 +4,8 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Luzifer/go-openssl/v4"
 	"github.com/mitchellh/go-homedir"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -85,8 +88,8 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 func ByteArrDiff(original, new []byte) int64 {
-	fmt.Println("new chunk size: ", len(new))
-	fmt.Println("old chunk size: ", len(original))
+	// fmt.Println("new chunk size: ", len(new))
+	// fmt.Println("old chunk size: ", len(original))
 	// Checks, if new byte array is initialized.
 	if (new == nil) || len(new) < 1 {
 		return int64(len(new))
@@ -143,4 +146,22 @@ func GetLocalIP() net.IP {
 		}
 	}
 	return nil
+}
+
+func DecryptAES(key string, ct string) (string, error) {
+	o := openssl.New()
+
+	dec, err := o.DecryptBytes(key, []byte(ct), openssl.BytesToKeyMD5)
+	if err != nil {
+		return "", err
+	}
+	return string(dec), nil
+}
+
+func GenerateToken(length int) string {
+	b := make([]byte, length)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b)
 }

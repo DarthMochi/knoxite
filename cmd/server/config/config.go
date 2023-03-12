@@ -61,10 +61,8 @@ func (sc *ServerConfig) Save(u string) error {
 	}
 
 	cfgDir := filepath.Dir(path.Path)
-	if !utils.Exist(cfgDir) {
-		if err := os.MkdirAll(cfgDir, 0755); err != nil {
-			return err
-		}
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		return err
 	}
 
 	return os.WriteFile(path.Path, buf.Bytes(), 0600)

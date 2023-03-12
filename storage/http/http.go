@@ -16,7 +16,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -167,7 +167,7 @@ func (backend *HTTPStorage) ReadFile(path string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 func (backend *HTTPStorage) WriteFile(path string, data []byte) (size uint64, err error) {
@@ -268,49 +268,14 @@ func (backend *HTTPStorage) LoadChunkIndex() ([]byte, error) {
 		return []byte{}, fmt.Errorf("no chunk index created yet")
 	}
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 // SaveChunkIndex stores the chunk-index.
 func (backend *HTTPStorage) SaveChunkIndex(data []byte) error {
-	httpClient := backend.getHTTPClient()
-	bodyBuf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuf)
-
-	// this step is very important
-	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", "chunkindex")
+	_, err := backend.WriteFile("/chunks/index", data)
 	if err != nil {
-		return err
+		return knoxite.ErrStoreChunkFailed
 	}
-
-	_, err = fileWriter.Write(data)
-	if err != nil {
-		return err
-	}
-
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	req, err := http.NewRequest(http.MethodPost, backend.url.String()+"/upload", bodyBuf)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
-	req.Header.Set("Path", "/chunks/index")
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return knoxite.ErrStoreChunkIndexFailed
-	}
-
-	return err
+	return nil
 }
