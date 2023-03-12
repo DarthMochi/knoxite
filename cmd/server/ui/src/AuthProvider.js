@@ -1,13 +1,13 @@
 import React, { useState, createContext, useContext, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { fetchData } from "./utils.js";
+import bcrypt from "bcryptjs-react";
 
 const AuthContext = createContext(null);
 
-const AuthProvider = ({client, children }) => {
+const AuthProvider = ({token, setToken, children}) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [token, setToken] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -23,7 +23,6 @@ const AuthProvider = ({client, children }) => {
     event.preventDefault();
     var username = event.target[0].value;
     var password = event.target[1].value;
-    var bcrypt = require('bcryptjs');
     var hash = bcrypt.hashSync(password, 14);  // has to be 14 (why?)
     const userToken = btoa(username + ':' + hash);
 

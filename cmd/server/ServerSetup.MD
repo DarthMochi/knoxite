@@ -45,5 +45,18 @@ When the setup command is finished, you can start the server with this command:
 $ knoxite-server serve -C <config_file_path>
 ```
 
-You can visit now `http(s)://<hostname>:<port>`, login with the specified username and password and create clients within the admin user interface.
+You can visit now `http(s)://<hostname>:<port>`, login with the specified username and password and create clients within the admin user interface. You should be greeted with this screen:
 
+![login-screen](./assets/login-screen.png)
+
+You can enter the login credentials specified in the setup comand. You will get an overview of all (already) created clients:
+
+![overview-screen](./assets/clients-screen.png)
+
+You can hit the button `Create new client` to get to this client form:
+
+![client-form-screen](./assets/new-client-screen.png)
+
+In the overview you can hit the `i`-button on one of your clients, to get a quick introduction, how you can backup with the knoxite client to this server:
+
+![quick-guide-screen](./assets/quick-guide-screen.png)
