@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"math/big"
 	"net"
@@ -42,7 +43,9 @@ var (
 	WarningLogger *log.Logger
 	InfoLogger    *log.Logger
 	ErrorLogger   *log.Logger
-	wd            string
+	uiPath        string
+	certsPath     string
+	logPath       string
 	setupCmd      = &cobra.Command{
 		Use: "setup",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -71,7 +74,7 @@ var (
 			if os.Getenv("APP_ENV") == "production" {
 				if err := initYarnInstallAndBuild(); err != nil {
 					defer os.Remove(cfg.DBFileName)
-					defer os.Remove(filepath.Join(wd, "cmd", "server", "ui", "build"))
+					defer os.Remove(filepath.Join(uiPath, "build"))
 					ErrorLogger.Println(err.Error())
 					return err
 				}
@@ -79,16 +82,15 @@ var (
 
 			if err := initDotEnv(); err != nil {
 				defer os.Remove(cfg.DBFileName)
-				defer os.Remove(filepath.Join(wd, "cmd", "server", "ui", "build"))
+				defer os.Remove(filepath.Join(uiPath, "build"))
 				ErrorLogger.Println(err.Error())
 				return err
 			}
 
 			if cfg.UseHTTPS {
-				certsPath := filepath.Join(wd, "certs")
-				if err := initCerts(certsPath); err != nil {
+				if err := initCerts(); err != nil {
 					defer os.Remove(cfg.DBFileName)
-					defer os.Remove(filepath.Join(wd, "cmd", "server", "ui", "build"))
+					defer os.Remove(filepath.Join(uiPath, "build"))
 					defer os.Remove(certsPath)
 					ErrorLogger.Println(err.Error())
 					return err
@@ -99,9 +101,49 @@ var (
 	}
 )
 
-func init() {
-	wd, _ = os.Getwd()
+func setPaths() error {
+	if _, err := os.Stat(filepath.Join("/", "opt", "knoxite-server")); !os.IsNotExist(err) {
+		os.Setenv("APP_ENV", "production")
+	}
 
+	if os.Getenv("APP_ENV") == "production" {
+		uiPath = filepath.Join("/", "opt", "knoxite-server")
+		certsPath = filepath.Join("/", "etc", "ssl", "certs")
+		logPath = filepath.Join("/", "var", "log")
+
+		if _, err := os.Stat(logPath); os.IsNotExist(err) {
+			if err := os.Mkdir(logPath, 0755); err != nil {
+				return err
+			}
+		}
+	} else if os.Getenv("APP_ENV") == "test" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		uiPath = filepath.Join(wd, "ui")
+		certsPath = filepath.Join(wd, "certs")
+		logPath = filepath.Join(wd, "logs")
+	} else {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+
+		uiPath = filepath.Join(wd, "cmd", "server", "ui")
+		certsPath = filepath.Join(wd, "cmd", "server", "certs")
+		logPath = filepath.Join(wd, "cmd", "server", "logs")
+	}
+
+	return nil
+}
+
+func init() {
+	if err := setPaths(); err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
 	setupCmd.PersistentFlags().StringVarP(&cfg.AdminPassword, "password", "p", "", "Admin password")
 	setupCmd.PersistentFlags().StringVarP(&cfg.AdminUserName, "username", "u", "", "Admin username")
 	setupCmd.PersistentFlags().StringVarP(&cfg.DBFileName, "dbfilename", "d", "", "File name for sqlite database")
@@ -159,10 +201,9 @@ func initStoragePath(storageURL string) error {
 }
 
 func initYarnInstallAndBuild() error {
-	uiFilePath := filepath.Join(wd, "ui")
 	InfoLogger.Println("Installing yarn packages (this could take a while) ...")
 	cmd := exec.Command("yarn", "install")
-	cmd.Dir = uiFilePath
+	cmd.Dir = uiPath
 	cmd.Stdout = os.Stdout
 	err := cmd.Run()
 	if err != nil {
@@ -175,7 +216,7 @@ func initYarnInstallAndBuild() error {
 	httpProxy := scheme + "localhost:" + cfg.AdminUIPort
 
 	// Rebuild package.json
-	file, err := os.ReadFile(filepath.Join(uiFilePath, "package.json")) //Read File
+	file, err := os.ReadFile(filepath.Join(uiPath, "package.json")) //Read File
 	if err != nil {
 		return err
 	}
@@ -187,14 +228,14 @@ func initYarnInstallAndBuild() error {
 		return err
 	}
 
-	err = os.WriteFile(filepath.Join(uiFilePath, "package.json"), result, 0644)
+	err = os.WriteFile(filepath.Join(uiPath, "package.json"), result, 0644)
 	if err != nil {
 		return err
 	}
 
 	InfoLogger.Println("Building admin user interface (this could take a while) ...")
 	cmd = exec.Command("yarn", "build")
-	cmd.Dir = uiFilePath
+	cmd.Dir = uiPath
 	cmd.Stdout = os.Stdout
 	err = cmd.Run()
 	if err != nil {
@@ -205,11 +246,7 @@ func initYarnInstallAndBuild() error {
 }
 
 func InitLogger() {
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	logFilePath := filepath.Join(wd, "cmd", "server", "logs", "log.txt")
+	logFilePath := filepath.Join(logPath, "knoxite-server-log.txt")
 	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatal(err)
@@ -225,7 +262,7 @@ func InitLogger() {
 	})
 }
 
-func initCerts(certsPath string) error {
+func initCerts() error {
 	if _, err := os.Stat(certsPath); os.IsNotExist(err) {
 		err := os.Mkdir(certsPath, 0755)
 		if err != nil {
@@ -277,7 +314,7 @@ func initCerts(certsPath string) error {
 		Bytes: caBytes,
 	})
 
-	f, err := os.OpenFile(filepath.Join(certsPath, "ca-cert.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(filepath.Join(certsPath, "knoxite-server-ca-cert.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -294,7 +331,7 @@ func initCerts(certsPath string) error {
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
 	})
 
-	f, err = os.OpenFile(filepath.Join(certsPath, "ca-key.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err = os.OpenFile(filepath.Join(certsPath, "knoxite-server-ca-key.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -340,7 +377,7 @@ func initCerts(certsPath string) error {
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
 	})
-	f, err = os.OpenFile(filepath.Join(certsPath, "cert.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err = os.OpenFile(filepath.Join(certsPath, "knoxite-server-cert.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -356,7 +393,7 @@ func initCerts(certsPath string) error {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
-	f, err = os.OpenFile(filepath.Join(certsPath, "key.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err = os.OpenFile(filepath.Join(certsPath, "knoxite-server-key.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -371,7 +408,7 @@ func initCerts(certsPath string) error {
 }
 
 func initDotEnv() error {
-	f, err := os.OpenFile(filepath.Join(wd, "cmd", "server", "ui", ".env"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(filepath.Join(uiPath, ".env"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,12 @@ body {
 
   display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+.nav-link {
+  color: white !important;
+  font-weight: bold;
 }
 
 .loading {
@@ -30,6 +36,7 @@ body {
   display: flex;
   align-items: center;
   font-weight: bold;
+  z-index: 9999;
 }
 
 .loading-spinner {
@@ -64,14 +71,18 @@ body {
   font-weight: bold;
   font-size: var(--bs-body-font-size);
   line-height: 36px;
+  position: relative;
 }
 
 .progress-bar {
+  position: absolute;
   height: 36px;
 }
 
-.progress-bar-label {
-  margin: 0px auto;
+.progress-used-percentage {
+  background: none;
+  margin: auto;
+  z-index: 9;
 }
 
 .quota-label-wrapper {
@@ -82,12 +93,16 @@ body {
 
 .quota-value {
   margin: 0px auto;
-  width: 200px;
+  width: 300px;
 }
 
 .slider-input-label {
   padding-left: 10px;
   padding-top: 6px;
+}
+
+.dropdown {
+  margin-left: 5px !important;
 }
 
 .slider-input {

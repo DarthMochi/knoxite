@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -64,7 +65,7 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 	quota := r.PostFormValue("quota")
 	name := r.PostFormValue("name")
 
-	u, err := NewClient(name, quota, *a)
+	u, err := a.NewClient(name, quota)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -157,7 +158,7 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	name := r.PostFormValue("name")
 	quota := r.PostFormValue("quota")
 
-	if err := UpdateClient(clientId, name, quota, *a); err != nil {
+	if err := a.UpdateClient(clientId, name, quota); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -198,7 +199,7 @@ func (a *App) totalAvailableStorageSize(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	size, err := a.AvailableSpace()
+	size, err := a.AvailableSpace(0)
 	if err != nil {
 		WarningLogger.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -273,12 +274,8 @@ var (
 			router.PathPrefix("/mkdir/").HandlerFunc(a.mkdir).Methods("GET")
 			router.PathPrefix("/delete").HandlerFunc(a.delete).Methods("DELETE")
 			router.HandleFunc("/getClientByAuthCode", a.getClientByAuthCode).Methods("GET")
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			if os.Getenv("APP_ENV") == "production" {
-				fsWebUI := http.FileServer(http.Dir(filepath.Join(wd, "ui", "build")))
+				fsWebUI := http.FileServer(http.Dir(filepath.Join(uiPath, "build")))
 				router.PathPrefix("/").Handler(http.StripPrefix("/", fsWebUI)).Methods("GET")
 			}
 			router.Use(loggingMiddleware)
@@ -290,9 +287,8 @@ var (
 				return nil
 			})
 			if cfg.UseHTTPS {
-				certsDir := filepath.Join(wd, "certs")
-				certPem := filepath.Join(certsDir, "cert.pem")
-				keyPem := filepath.Join(certsDir, "key.pem")
+				certPem := filepath.Join(certsPath, "knoxite-server-cert.pem")
+				keyPem := filepath.Join(certsPath, "knoxite-server-key.pem")
 				err = http.ListenAndServeTLS(":"+cfg.AdminUIPort, certPem, keyPem, router)
 			} else {
 				err = http.ListenAndServe(":"+cfg.AdminUIPort, nil)
@@ -316,6 +312,10 @@ func loggingMiddleware(next http.Handler) http.Handler {
 }
 
 func init() {
+	if err := setPaths(); err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
 	serveCmd.PersistentFlags().StringVarP(&cfgFileName, "configURL", "C", config.DefaultPath(), "Path to configuration file")
 	RootCmd.AddCommand(serveCmd)
 }
@@ -633,7 +633,7 @@ func (a *App) DeleteFile(client Client, filePath string) error {
 	return nil
 }
 
-func (a *App) AvailableSpace() (uint64, error) {
+func (a *App) AvailableSpace(quota uint64) (uint64, error) {
 	statOS := &StatOS{}
 	space, err := statOS.GetAvailableStorageSpace()
 	if err != nil {
@@ -642,6 +642,7 @@ func (a *App) AvailableSpace() (uint64, error) {
 
 	var totalQuota uint64
 	a.DB.Table("clients").Select("sum(quota)").Row().Scan(&totalQuota)
+	fmt.Println(totalQuota)
 
-	return space - totalQuota, nil
+	return space - totalQuota + quota, nil
 }

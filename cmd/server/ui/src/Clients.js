@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrashAlt, faEdit, faPlus, faInfo, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { Table, Button, Card, } from "react-bootstrap";
@@ -9,34 +9,88 @@ import {
   deleteClientRequest,
   fetchClients,
   fetchStorageSize,
+  convertSizeByStep,
+  exponentSwitch,
 } from "./utils.js";
 import { useNavigate } from "react-router-dom";
 
-const Clients = ({setClients, setIsLoading, setError, clients, setClient, setStorageSize, setStorageSizeLabel, setAlert}) => {
+
+const Clients = ({
+  setClients, 
+  setIsLoading, 
+  setError, 
+  clients, 
+  setClient, 
+  storageSizeLabel,
+  setStorageSizeLabel, 
+  setAlert, 
+  setStorageSizeInBytes,
+  storageSizeInBytes}) => {
   const { t } = useTranslation();
   const { token } = useAuth();
-  const navigate = useNavigate();
   const isCalledRef = useRef(false);
+  const navigate = useNavigate();
+  const [totalUsedSpace, setTotalUsedSpace] = useState(0);
+  const [totalQuota, setTotalQuota] = useState(0);
+  const [totalSpace, setTotalSpace] = useState(storageSizeInBytes);
 
   useEffect(() => {
-    async function loadClients() {
-      const cs = await fetchClients(navigate, token);
-      if (cs !== null) {
-        setClients(cs);
-        const storageInfo = await fetchStorageSize(token);
-        var [size, label] = sizeConversion(storageInfo, 0);
-        setStorageSize(size);
-        setStorageSizeLabel(label);
-      } else {
-        navigate("/login");
-      }
-    };
-    if(!isCalledRef.current) {
-      isCalledRef.current = true;
-      loadClients();
+    if(token === null) {
       setIsLoading(false);
+      navigate("/admin/login");
     }
-  }, [setClients, navigate, setStorageSize, setStorageSizeLabel, setIsLoading, token]);
+    setClient(null);
+
+    if((clients || clients.length === 0) && !isCalledRef.current) {
+      setTotalQuota(0);
+      setTotalUsedSpace(0);
+      setIsLoading(true);
+
+      fetchClients(token).then((cs) => {
+        if (cs !== null) {
+          setClients(cs);
+        }
+      });
+    }
+      
+    if((clients && clients.length > 0) && !isCalledRef.current) {
+      fetchStorageSize(token).then((storageInfo) => {
+        setStorageSizeInBytes(storageInfo);
+        setTotalSpace(storageInfo);
+        var label = sizeConversion(storageInfo, 0)[1];
+        setStorageSizeLabel(label);
+
+        var [tusp, tquo, tsp] = [0, 0, storageInfo];
+
+        clients.forEach((c, _index) => {
+          tusp += c.UsedSpace;
+          tquo += c.Quota;
+          tsp += c.Quota;
+        });
+        setTotalQuota(tquo);
+        setTotalUsedSpace(tusp);
+        setTotalSpace(tsp);
+        isCalledRef.current = true;
+        setIsLoading(false);
+      });
+    }
+  }, [
+    totalSpace,
+    totalQuota,
+    storageSizeInBytes,
+    setClients, 
+    setClient,
+    clients, 
+    setStorageSizeLabel, 
+    setIsLoading, 
+    setTotalUsedSpace,
+    setTotalQuota,
+    setTotalSpace,
+    setStorageSizeInBytes,
+    token,
+    isCalledRef,
+    navigate,
+  ]);
 
   return (
     <>
@@ -44,7 +98,21 @@ const Clients = ({setClients, setIsLoading, setError, clients, setClient, setSto
         <Card.Body>
           <Table hover size="sm">
             <TableHeader />
-            <TableBody clientData={clients} token={token} setClients={setClients} setIsLoading={setIsLoading} setError={setError} setAlert={setAlert} setClient={setClient} />
+            <TableBody 
+              clientData={clients} 
+              token={token} 
+              setClients={setClients} 
+              setIsLoading={setIsLoading} 
+              setError={setError} 
+              setAlert={setAlert} 
+              setClient={setClient}
+              setStorageSizeInBytes={setStorageSizeInBytes}
+              setStorageSizeLabel={setStorageSizeLabel} />
+            <TableFooter
+              storageSizeLabel={storageSizeLabel}
+              storageSpace={totalSpace}
+              totalUsedSpace={totalUsedSpace}
+              totalQuota={totalQuota} />
           </Table>
           <Button variant="success" onClick={() => navigate("/admin/clients/new")}>
             <FontAwesomeIcon icon={faPlus} /> {t("client.new_button")}
@@ -86,7 +154,16 @@ const TableHeader = () => {
     );
 };
 
-const TableBody = ({clientData, setClients, setClient, setIsLoading, setError, setAlert, token}) => {
+const TableBody = ({
+  clientData, 
+  setClients, 
+  setClient, 
+  setIsLoading, 
+  setError, 
+  setAlert, 
+  token, 
+  setStorageSizeInBytes,
+  setStorageSizeLabel}) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -98,7 +175,12 @@ const TableBody = ({clientData, setClients, setClient, setIsLoading, setError, s
           setClients(clientData.filter(client => {
             return parseInt(client.ID) !== parseInt(client_id);
           }));
-          setIsLoading(false);
+          fetchStorageSize(token).then((storageInfo) => {
+            setStorageSizeInBytes(storageInfo);
+            var label = sizeConversion(storageInfo, 0)[1];
+            setStorageSizeLabel(label);
+            setIsLoading(false);
+          });
         } else {
           setError(response.error);
           setAlert(response.error.message);
@@ -128,26 +210,27 @@ const TableBody = ({clientData, setClients, setClient, setIsLoading, setError, s
         <td>{client.ID}</td>
         <td>{client.Name}</td>
         <td>
+          <Button variant="warning" onClick={() => {navigator.clipboard.writeText(document.getElementById("auth-code-" + client.ID).textContent)}}>
+            <FontAwesomeIcon icon={faCopy} />
+          </Button>{' '}
           <span id={"auth-code-" + client.ID}>
             {client.AuthCode}
           </span>
-          <Button variant="light" onClick={() => {navigator.clipboard.writeText(document.getElementById("auth-code-" + client.ID).textContent)}}>
-            <FontAwesomeIcon icon={faCopy} />
-          </Button>
         </td>
         <td>{quota[0] + " " + quota[1]}</td>
         <td className="progress-cell">
           <div className="progress">
-            <div className={ProgressBarClassNames} role="progressbar" style={{width: UsedSpacePercentage + "%"}} aria-valuenow={UsedSpacePercentage} aria-valuemin="0" aria-valuemax="100">
+            <span className="progress-used-percentage">
               {UsedSpacePercentage + "%"}
-            </div>
+            </span>
+            <div className={ProgressBarClassNames} role="progressbar" style={{width: UsedSpacePercentage + "%"}} aria-valuenow={UsedSpacePercentage} aria-valuemin="0" aria-valuemax="100"></div>
           </div>
         </td>
         <td>
           <Button variant="danger" onClick={() => deleteClient(client.ID)}>
             <FontAwesomeIcon icon={faTrashAlt} />
           </Button>{' '}
-          <Button variant="light" onClick={() => editForm(index)}>
+          <Button variant="secondary" onClick={() => editForm(index)}>
             <FontAwesomeIcon icon={faEdit} />
           </Button>{' '}
           <Button variant="info" onClick={() => clientInfo(index)}>
@@ -158,6 +241,46 @@ const TableBody = ({clientData, setClients, setClient, setIsLoading, setError, s
     );
   });
   return <tbody>{clientElements}</tbody>;
+};
+
+const TableFooter =({
+  totalQuota,
+  totalUsedSpace,
+  storageSpace,
+  storageSizeLabel
+  }) => {
+  const UsedSpacePercentage = Math.round(100*(totalUsedSpace / storageSpace));
+  const QuotaPercentage = Math.round(100*(totalQuota / storageSpace));
+  const storageSize = convertSizeByStep(storageSpace, exponentSwitch(storageSizeLabel));
+  const quotaSize = convertSizeByStep(totalQuota, exponentSwitch(storageSizeLabel));
+  const usedSpaceSize = convertSizeByStep(totalUsedSpace, exponentSwitch(storageSizeLabel));
+  const usedSpacePGClassNames = quotaCSS(UsedSpacePercentage);
+  const quotaPGClassNames = quotaCSS(QuotaPercentage);
+  return (
+    <tfoot>
+      <tr>
+        <th>Total Given:</th>
+        <th className="progress-cell" colSpan={2}>
+          <div className="progress">
+            <span className="progress-used-percentage">
+              {quotaSize + " / " + storageSize + " " + storageSizeLabel}
+            </span>
+            <div className={quotaPGClassNames} role="progressbar" style={{width: QuotaPercentage + "%"}} aria-valuenow={UsedSpacePercentage} aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+        </th>
+        <th>Total Used:</th>
+        <th className="progress-cell">
+          <div className="progress">
+            <span className="progress-used-percentage">
+              {usedSpaceSize + " / " + storageSize + " " + storageSizeLabel}
+            </span>
+            <div className={usedSpacePGClassNames} role="progressbar" style={{width: UsedSpacePercentage + "%"}} aria-valuenow={UsedSpacePercentage} aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+        </th>
+        <th></th>
+      </tr>
+    </tfoot>
+  )
 };
 
 export default Clients;

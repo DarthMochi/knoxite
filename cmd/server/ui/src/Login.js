@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Button, Card, Form, Container } from 'react-bootstrap';
 import ErrorMessage from './ErrorMessage';
 import logo from './logo.svg';
@@ -8,6 +8,10 @@ import { useAuth } from "./AuthProvider";
 function Login(props) {
   const { t } = useTranslation();
   const { onLogin } = useAuth();
+
+  useEffect(() => {
+    props.setIsLoading(false);
+  });
 
   return (
     <Container className="vertical-center">

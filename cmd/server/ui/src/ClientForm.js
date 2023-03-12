@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Button, Card, Form, Container } from 'react-bootstrap';
+import React, { useState } from 'react';
+import { Button, Card, Form, Container, Dropdown } from 'react-bootstrap';
 import Slider from 'react-rangeslider';
 import 'react-rangeslider/lib/index.css';
 import { useTranslation } from "react-i18next";
@@ -11,6 +11,8 @@ import {
   convertSizeByStep,
   createClientRequest, 
   updateClientRequest, 
+  getSizeOptions,
+  sizeConversion,
 } from './utils.js';
 
 const ClientForm = ({
@@ -18,24 +20,16 @@ const ClientForm = ({
   setClient, 
   setError, 
   setIsLoading, 
-  storageSize, 
+  storageSizeInBytes, 
   storageSizeLabel}) => {
     const { t } = useTranslation();
     const { token } = useAuth();
     const navigate = useNavigate();
-    const isCalledRef = useRef(false);
-
-    useEffect(() => {
-      if(!isCalledRef.current) {
-        isCalledRef.current = true;
-        var c = client;
-        if (c) {
-          c.Quota = convertSizeByStep(c.Quota, exponentSwitch(storageSizeLabel));
-          c.UsedSpace = convertSizeByStep(c.UsedSpace, exponentSwitch(storageSizeLabel));
-          setClient(c);
-        }
-      }
-    }, [client, setClient, storageSizeLabel]);
+    const options = getSizeOptions(storageSizeLabel);
+    const [clientSizeLabel, setClientSizeLabel] = useState(storageSizeLabel);
+    const [quota, setQuota] = useState(convertSizeByStep(client.Quota, exponentSwitch(clientSizeLabel)));
+    const [maxStorageSize, setMaxStorageSize] = useState(sizeConversion(storageSizeInBytes + client.Quota, 0)[0]);
+    const [usedSpace, setUsedSpace] = useState(convertSizeByStep(client.UsedSpace, exponentSwitch(clientSizeLabel)));
 
     const createClient = async () => {
       setIsLoading(true);
@@ -73,7 +67,7 @@ const ClientForm = ({
         event.preventDefault();
         setIsLoading(true);
         var c = client;
-        c.Quota = sizeToBytes(c.Quota, storageSizeLabel);
+        c.Quota = sizeToBytes(quota, clientSizeLabel);
         setClient(c);
         if (client.ID) {
           updateClient();
@@ -83,23 +77,34 @@ const ClientForm = ({
     };
 
     const handleOnChange = (event) => {
-      var c = client;
-      // c.Quota = event.target.value;
-      c.Quota = event;
-      setClient(c);
+      setQuota(event);
     };
 
     const handleInputChange = (event) => {
-      var c = client;
-      c.Quota = event.target.value === '' ? c.Quota : Number(event.target.value);
-      setClient(c);
+      setQuota(event.target.value === '' ? quota : Number(event.target.value));
     };
 
     const handleNameChange = (event) => {
       var c = client;
       c.Name = event.target.value;
       setClient(c);
-    }
+    };
+
+    const changeSize = (event) => {
+      var newLabel = event.target.text;
+      setQuota(convertSizeByStep(sizeToBytes(quota, clientSizeLabel), exponentSwitch(newLabel)));
+      setUsedSpace(convertSizeByStep(sizeToBytes(usedSpace, clientSizeLabel), exponentSwitch(newLabel)));
+      setMaxStorageSize(convertSizeByStep(sizeToBytes(maxStorageSize, clientSizeLabel), exponentSwitch(newLabel)))
+      setClientSizeLabel(newLabel);
+    };
+
+    const dropdownOptions = options.map((label) => {
+      return (
+        <Dropdown.Item key={label} onClick={(event) => changeSize(event)}>
+          {label}
+        </Dropdown.Item>
+      );
+    });
 
     return (
       <Container>
@@ -114,23 +119,38 @@ const ClientForm = ({
                 <Form.Label>{t("client.quota")}</Form.Label>
                 <div className='slider'>
                   <Slider
-                    max={storageSize}
-                    min={client.UsedSpace}
-                    value={client.Quota}
+                    max={maxStorageSize}
+                    min={usedSpace}
+                    value={quota}
                     onChange={handleOnChange}
                   />
                 </div>
                 <div className="quota-label-wrapper">
                   <div className='quota-value text-center'>
-                    <Form.Control
-                      type="number"
-                      max={storageSize}
-                      min={client.UsedSpace}
-                      value={client.Quota}
-                      onChange={handleInputChange}
-                      className="slider-input"
-                    />
-                    <Form.Label className="slider-input-label">{storageSizeLabel + " / " + storageSize + " " + storageSizeLabel}</Form.Label>
+                    <Form.Group className='mb-3 input-group'>
+                      <Form.Control
+                        type="number"
+                        max={maxStorageSize}
+                        min={usedSpace}
+                        value={quota}
+                        onChange={handleInputChange}
+                        className="slider-input"
+                      />
+                      <Form.Label className="slider-input-label">
+                        {clientSizeLabel + " / "}
+                      </Form.Label>
+                      <Form.Label className="slider-input-label">
+                        {maxStorageSize + " "}
+                      </Form.Label>{' '}
+                      <Dropdown>
+                        <Dropdown.Toggle variant='success' id='dropdown-basic'>
+                          {clientSizeLabel}
+                        </Dropdown.Toggle>
+                        <Dropdown.Menu>
+                          {dropdownOptions}
+                        </Dropdown.Menu>
+                      </Dropdown>
+                    </Form.Group>
                   </div>
                 </div>
               </Form.Group>

@@ -1,28 +1,16 @@
-export const fetchData = async (url, options) => {
-    const response = await fetch(url, options);
-    // if (!response.ok) {
-    //     throw new Error(`Error fetching data. Server replied ${response.status}`);
-    // }
-    return response;
+const stepsDict = {
+  0: "bytes",
+  1: "kB", // kilobyte
+  2: "MB", // megabyte
+  3: "GB", // gigabyte
+  4: "TB", // terabyte
+  5: "PB", // petabyte
+  6: "EB", // exabyte
+  7: "ZB", // zetabyte
+  8: "YB", // yotabyte
 };
 
-export const stepsToString = (steps) => {
-  const stepSwitch = (step) => ({
-    0: "bytes",
-    1: "kB", // kilobyte
-    2: "MB", // megabyte
-    3: "GB", // gigabyte
-    4: "TB", // terabyte
-    5: "PB", // petabyte
-    6: "EB", // exabyte
-    7: "ZB", // zetabyte
-    8: "YB", // yotabyte
-  })[step];
-
-  return stepSwitch(steps);
-};
-
-export const exponentSwitch = (label) => ({
+const sizesDict = {
   "bytes": 0,
   "kB": 1,
   "MB": 2,
@@ -32,7 +20,18 @@ export const exponentSwitch = (label) => ({
   "EB": 6,
   "ZB": 7,
   "YB": 8,
-})[label];
+};
+
+export const fetchData = async (url, options) => {
+    const response = await fetch(url, options);
+    // if (!response.ok) {
+    //     throw new Error(`Error fetching data. Server replied ${response.status}`);
+    // }
+    return response;
+};
+
+export const stepsToString = (steps) => (stepsDict)[steps];
+export const exponentSwitch = (label) => (sizesDict)[label];
 
 export const sizeToBytes = (size, sizeLabel) => {
   return size * Math.pow(1000, exponentSwitch(sizeLabel));
@@ -53,6 +52,15 @@ export const sizeConversion = (size, steps) => {
 
   return sizeConversion(Math.floor(size/1000), ++steps);
 };
+
+export const getSizeOptions = (storageSizeLabel) => {
+  var options = [];
+  var len = exponentSwitch(storageSizeLabel);
+  for(var i = 0; i <= len; i++) {
+    options.push(stepsDict[i]);
+  }
+  return options;
+}
 
 export const getClient = (setIsLoading, id, token, setClientToken) => {
   setIsLoading(true);
@@ -87,20 +95,20 @@ export const fetchClient = async (token, id) => {
   return await response.json();
 };
 
-export const fetchClients = async (navigate, token) => {
+export const fetchClients = async (token) => {
   const url = "/clients";
   const options = {
     headers: {
       'Authorization': 'Basic ' + token,
     },
   };
-  const response = await fetchData(url, options);
-  if(response.ok) {
-    return await response.json();
-  } else {
-    navigate("/login");
-    return null;
-  }
+  return fetchData(url, options).then((response) => {
+    if(response.ok) {
+      return response.json();
+    } else {
+      return null;
+    }  
+  });
 };
 
 export const fetchStorageSize = async (token) => {

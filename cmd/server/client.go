@@ -22,7 +22,7 @@ type Client struct {
 	UsedSpace uint64
 }
 
-func NewClient(name string, quotaString string, a App) (*url.URL, error) {
+func (a *App) NewClient(name string, quotaString string) (*url.URL, error) {
 	u := &url.URL{}
 	quota, err := strconv.ParseUint(quotaString, 10, 64)
 	if err != nil {
@@ -30,7 +30,7 @@ func NewClient(name string, quotaString string, a App) (*url.URL, error) {
 		return u, err
 	}
 
-	availableSpace, err := a.AvailableSpace()
+	availableSpace, err := a.AvailableSpace(0)
 	if err != nil {
 		WarningLogger.Println(err)
 		return u, err
@@ -74,7 +74,7 @@ func NewClient(name string, quotaString string, a App) (*url.URL, error) {
 	return u, nil
 }
 
-func UpdateClient(clientId string, name string, quotaString string, a App) error {
+func (a *App) UpdateClient(clientId string, name string, quotaString string) error {
 	var client Client
 	a.DB.First(&client, clientId)
 
@@ -86,7 +86,7 @@ func UpdateClient(clientId string, name string, quotaString string, a App) error
 		return errInvalidBody
 	}
 
-	availableSpace, err := a.AvailableSpace()
+	availableSpace, err := a.AvailableSpace(client.Quota)
 	if err != nil {
 		WarningLogger.Println(errNoSpace)
 		return errNoSpace

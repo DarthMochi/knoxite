@@ -12,6 +12,9 @@ const resources = {
         username_placeholder: "Username",
         password_placeholder: "Password",
       },
+      navigation: {
+        home: "Home",
+      },
       delete_confirm_message: "Are you sure?",
       admin_name: "Admin username",
       admin_password: "Admin password",

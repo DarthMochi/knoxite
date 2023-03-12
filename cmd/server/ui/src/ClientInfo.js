@@ -133,7 +133,7 @@ const ClientInfo = ({client}) => {
               </span>
             </p>
             <p>
-              {t("tutorial.getting_started")} <a href="https://knoxite.com/docs/getting-started/">Getting Started</a>
+              {t("tutorial.getting_started")} <a href="https://knoxite.com/docs/getting-started" target="_blank" rel="noreferrer">Getting Started</a>
             </p>
           </Card.Body>
         </Card>

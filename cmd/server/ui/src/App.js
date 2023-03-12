@@ -21,7 +21,8 @@ function App() {
     UsedSpace: 0,
   });
   const [clients, setClients] = useState([]);
-  const [storageSize, setStorageSize] = useState(0);
+  const [token, setToken] = useState(null);
+  const [storageSizeInBytes, setStorageSizeInBytes] = useState(0);
   const [storageSizeLabel, setStorageSizeLabel] = useState("");
 
   const wrapperSetClient = useCallback(val => {
@@ -31,7 +32,6 @@ function App() {
       Quota: val ? val.Quota : 0,
       UsedSpace: val ? val.UsedSpace : 0,
       AuthCode: val ? val.AuthCode : "",
-      Password: val && val.Password !== "" ? val.Password : "",
     };
     setClient(c);
   }, [setClient]);
@@ -42,16 +42,18 @@ function App() {
 
   return (
     <>
-      <AuthProvider client={client}>  
-        <Navigation />
+      <AuthProvider token={token} setToken={setToken}>  
+        <Navigation token={token} />
 
         <Container fluid>
           <Row className="justify-content-md-center">
             <ErrorMessage message={alert} err={error} />
             <Col md="90%">
               <Routes>
-                <Route index element={<Login />} />
-                <Route path="/admin/login" element={<Login />} />
+                <Route index element={<Login
+                  setIsLoading={setIsLoading}  />} />
+                <Route path="/admin/login" element={<Login
+                  setIsLoading={setIsLoading}  />} />
                 <Route path="/admin/clients">
                   <Route index element={<Clients 
                     error={error} 
@@ -60,17 +62,17 @@ function App() {
                     setIsLoading={setIsLoading} 
                     clients={clients} 
                     setClients={wrapperSetClients} 
-                    storageSize={storageSize} 
                     storageSizeLabel={storageSizeLabel} 
-                    setStorageSize={setStorageSize} 
                     setStorageSizeLabel={setStorageSizeLabel} 
-                    setClient={wrapperSetClient} />} />
+                    setClient={wrapperSetClient}
+                    setStorageSizeInBytes={setStorageSizeInBytes}
+                    storageSizeInBytes={storageSizeInBytes} />} />
                   <Route path="new" element={<ClientForm 
                     client={client} 
                     setClient={wrapperSetClient} 
                     setIsLoading={setIsLoading} 
                     setError={setError} 
-                    storageSize={storageSize} 
+                    storageSizeInBytes={storageSizeInBytes} 
                     storageSizeLabel={storageSizeLabel} />} />
                   <Route path=":id" element={<ClientInfo 
                     client={client} />} />
@@ -78,7 +80,7 @@ function App() {
                     client={client} 
                     setClient={wrapperSetClient} 
                     setIsLoading={setIsLoading} 
-                    storageSize={storageSize}
+                    storageSizeInBytes={storageSizeInBytes}
                     storageSizeLabel={storageSizeLabel} />} />
                 </Route>
               </Routes>
