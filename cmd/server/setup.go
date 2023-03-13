@@ -127,7 +127,8 @@ func setPaths() error {
 		if err != nil {
 			return err
 		}
-		logPath, err = scope.LogPath("knoxite-server.log")
+		userScope := gap.NewScope(gap.User, "knoxite-server")
+		logPath, err = userScope.LogPath("knoxite-server.log")
 		if err != nil {
 			return err
 		}
