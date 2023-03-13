@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/knoxite/knoxite/cmd/server/utils"
-	gap "github.com/muesli/go-app-paths"
 	"github.com/pelletier/go-toml"
 )
 
@@ -30,13 +29,7 @@ type ServerConfig struct {
 }
 
 func DefaultPath() string {
-	userScope := gap.NewScope(gap.User, appName)
-	path, err := userScope.ConfigPath(cfgFileName)
-	if err != nil {
-		return cfgFileName
-	}
-
-	return path
+	return utils.DefaultPath(appName, cfgFileName)
 }
 
 func (sc *ServerConfig) Save(u string) error {

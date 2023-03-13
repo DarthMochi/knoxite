@@ -15,8 +15,19 @@ import (
 
 	"github.com/Luzifer/go-openssl/v4"
 	"github.com/mitchellh/go-homedir"
+	gap "github.com/muesli/go-app-paths"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func DefaultPath(appName, filename string) string {
+	userScope := gap.NewScope(gap.User, appName)
+	path, err := userScope.ConfigPath(filename)
+	if err != nil {
+		return filename
+	}
+
+	return path
+}
 
 func Exist(file string) bool {
 	_, err := os.Stat(file)

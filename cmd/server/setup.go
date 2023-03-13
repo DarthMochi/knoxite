@@ -102,20 +102,15 @@ var (
 )
 
 func setPaths() error {
-	if _, err := os.Stat(filepath.Join("/", "opt", "knoxite-server")); !os.IsNotExist(err) {
-		os.Setenv("APP_ENV", "production")
-	}
-
-	if os.Getenv("APP_ENV") == "production" {
-		uiPath = filepath.Join("/", "opt", "knoxite-server")
-		certsPath = filepath.Join("/", "etc", "ssl", "certs")
-		logPath = filepath.Join("/", "var", "log")
-
-		if _, err := os.Stat(logPath); os.IsNotExist(err) {
-			if err := os.Mkdir(logPath, 0755); err != nil {
-				return err
-			}
+	if os.Getenv("APP_ENV") == "development" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
 		}
+
+		uiPath = filepath.Join(wd, "cmd", "server", "ui")
+		certsPath = filepath.Join(wd, "cmd", "server", "certs")
+		logPath = filepath.Join(wd, "cmd", "server", "logs")
 	} else if os.Getenv("APP_ENV") == "test" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -126,14 +121,27 @@ func setPaths() error {
 		certsPath = filepath.Join(wd, "certs")
 		logPath = filepath.Join(wd, "logs")
 	} else {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
+		uiPath = utils.DefaultPath("knoxite-server", "ui")
+		certsPath = utils.DefaultPath("knoxite-server", "certs")
+		logPath = utils.DefaultPath("knoxite-server", "logs")
+
+		if _, err := os.Stat(uiPath); os.IsNotExist(err) {
+			if err := os.Mkdir(uiPath, 0755); err != nil {
+				return err
+			}
 		}
 
-		uiPath = filepath.Join(wd, "cmd", "server", "ui")
-		certsPath = filepath.Join(wd, "cmd", "server", "certs")
-		logPath = filepath.Join(wd, "cmd", "server", "logs")
+		if _, err := os.Stat(certsPath); os.IsNotExist(err) {
+			if err := os.Mkdir(certsPath, 0755); err != nil {
+				return err
+			}
+		}
+
+		if _, err := os.Stat(logPath); os.IsNotExist(err) {
+			if err := os.Mkdir(logPath, 0755); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
