@@ -22,7 +22,7 @@ var (
 		Use:   determineCmdName(),
 		Short: "knoxite server is a http(s) backend for knoxite",
 		Long: "knoxite server is a http(s) backend for knoxite\n" +
-			"Complete setup information is available at https://github.com/knoxite/knoxite/cmd/server/README.md",
+			"Complete setup information is available at https://github.com/knoxite/knoxite/cmd/server/ServerSetup.MD",
 		SilenceErrors:     true,
 		SilenceUsage:      true,
 		DisableAutoGenTag: true,
