@@ -122,13 +122,12 @@ func setPaths() error {
 		certsPath = filepath.Join(wd, "certs")
 		logPath = filepath.Join(wd, "logs")
 	} else {
-		scope := gap.NewScope(gap.System, "knoxite-server")
+		scope := gap.NewScope(gap.User, "knoxite-server")
 		dataDirs, err := scope.DataDirs()
 		if err != nil {
 			return err
 		}
-		userScope := gap.NewScope(gap.User, "knoxite-server")
-		logPath, err = userScope.LogPath("knoxite-server.log")
+		logPath, err = scope.LogPath("knoxite-server.log")
 		if err != nil {
 			return err
 		}
