@@ -22,6 +22,7 @@ import (
 
 	"github.com/knoxite/knoxite/cmd/server/config"
 	"github.com/knoxite/knoxite/cmd/server/utils"
+	gap "github.com/muesli/go-app-paths"
 	"github.com/natefinch/lumberjack"
 	"github.com/spf13/cobra"
 	"gorm.io/driver/sqlite"
@@ -121,27 +122,17 @@ func setPaths() error {
 		certsPath = filepath.Join(wd, "certs")
 		logPath = filepath.Join(wd, "logs")
 	} else {
-		uiPath = utils.DefaultPath("knoxite-server", "ui")
-		certsPath = utils.DefaultPath("knoxite-server", "certs")
-		logPath = utils.DefaultPath("knoxite-server", "logs")
-
-		if _, err := os.Stat(uiPath); os.IsNotExist(err) {
-			if err := os.Mkdir(uiPath, 0755); err != nil {
-				return err
-			}
+		scope := gap.NewScope(gap.System, "knoxite-server")
+		dataDirs, err := scope.DataDirs()
+		if err != nil {
+			return err
 		}
-
-		if _, err := os.Stat(certsPath); os.IsNotExist(err) {
-			if err := os.Mkdir(certsPath, 0755); err != nil {
-				return err
-			}
+		logPath, err = scope.LogPath("knoxite-server.log")
+		if err != nil {
+			return err
 		}
-
-		if _, err := os.Stat(logPath); os.IsNotExist(err) {
-			if err := os.Mkdir(logPath, 0755); err != nil {
-				return err
-			}
-		}
+		uiPath = filepath.Join(dataDirs[0], "ui")
+		certsPath = filepath.Join(dataDirs[0], "certs")
 	}
 
 	return nil
