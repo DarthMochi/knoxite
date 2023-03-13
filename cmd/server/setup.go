@@ -253,7 +253,7 @@ func initYarnInstallAndBuild() error {
 }
 
 func InitLogger() {
-	logFilePath := filepath.Join(logPath, "knoxite-server-log.txt")
+	logFilePath := filepath.Join(logPath, "knoxite-server.log")
 	if os.Getenv("APP_ENV") == "production" {
 		logFilePath = logPath
 	}

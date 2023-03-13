@@ -53,7 +53,7 @@ const Clients = ({
       });
     }
       
-    if((clients && clients.length > 0) && !isCalledRef.current) {
+    if(!isCalledRef.current) {
       fetchStorageSize(token).then((storageInfo) => {
         setStorageSizeInBytes(storageInfo);
         setTotalSpace(storageInfo);
@@ -62,11 +62,13 @@ const Clients = ({
 
         var [tusp, tquo, tsp] = [0, 0, storageInfo];
 
-        clients.forEach((c, _index) => {
-          tusp += c.UsedSpace;
-          tquo += c.Quota;
-          tsp += c.Quota;
-        });
+        if(clients.length > 0) {
+          clients.forEach((c, _index) => {
+            tusp += c.UsedSpace;
+            tquo += c.Quota;
+            tsp += c.Quota;
+          });
+        }
         setTotalQuota(tquo);
         setTotalUsedSpace(tusp);
         setTotalSpace(tsp);
