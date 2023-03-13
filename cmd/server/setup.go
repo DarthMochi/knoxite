@@ -133,6 +133,7 @@ func setPaths() error {
 		}
 		uiPath = filepath.Join(dataDirs[0], "ui")
 		certsPath = filepath.Join(dataDirs[0], "certs")
+		os.Setenv("APP_ENV", "production")
 	}
 
 	return nil
@@ -246,6 +247,9 @@ func initYarnInstallAndBuild() error {
 
 func InitLogger() {
 	logFilePath := filepath.Join(logPath, "knoxite-server-log.txt")
+	if os.Getenv("APP_ENV") == "production" {
+		logFilePath = logPath
+	}
 	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatal(err)
