@@ -31,9 +31,9 @@
   "web-vitals": "^1.0.1"
  },
  "scripts": {
-  "build": "NODE_ENV=production react-scripts --openssl-legacy-provider build",
+  "build": "react-scripts build",
   "eject": "react-scripts eject",
-  "start": "NODE_ENV=development react-scripts --openssl-legacy-provider start",
+  "start": "react-scripts start",
   "test": "react-scripts test"
  },
  "eslintConfig": {
@@ -52,14 +52,6 @@
    ">0.2%",
    "not dead",
    "not op_mini all"
-  ]
- },
- "react-dotenv": {
-  "whitelist": [
-   "REACT_APP_NODE_ENV",
-   "REACT_APP_ADMIN_HOSTNAME",
-   "REACT_APP_PORT",
-   "REACT_APP_SERVER_SCHEME"
   ]
  }
 }

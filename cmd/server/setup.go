@@ -111,12 +111,17 @@ func setPaths() error {
 		}
 
 		if _, err = os.Stat(filepath.Dir(logPath)); os.IsNotExist(err) {
-			if err := os.Mkdir(filepath.Dir(logPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
 				return err
 			}
 		}
 
 		certsPath = filepath.Join(dataDirs[0], "certs")
+		if _, err = os.Stat(filepath.Dir(certsPath)); os.IsNotExist(err) {
+			if err := os.MkdirAll(filepath.Dir(certsPath), 0755); err != nil {
+				return err
+			}
+		}
 		os.Setenv("APP_ENV", "production")
 	}
 
