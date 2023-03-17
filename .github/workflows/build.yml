@@ -5,7 +5,7 @@ jobs:
   build:
     strategy:
       matrix:
-        go-version: [~1.13, ^1]
+        go-version: [~1.19, ^1]
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
@@ -22,8 +22,25 @@ jobs:
       - name: Download Go modules
         run: go mod download
 
+      - name: Set Node.js 16.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+      - name: Run yarn install
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: install
+          dir: "cmd/server/ui"
+
+      - name: Build admin ui
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: build
+          dir: "cmd/server/ui"
+
       - name: Build
         run: go build -v ./...
 
       - name: Test
-        run: go test -v -tags ci ./...
+        run: APP_ENV=test go test -v -tags ci ./...

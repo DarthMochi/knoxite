@@ -5,6 +5,9 @@
 package main
 
 import (
+	"path/filepath"
+	"unsafe"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -14,11 +17,7 @@ func (statOS *StatOS) GetAvailableStorageSpace() (uint64, error) {
 
 	var freeBytes int64
 
-	wd, err := os.Getwd()
-	if err != nil {
-		return 0, err
-	}
-
+	wd := filepath.Join(cfg.StoragesPath)
 	_, _, err := c.Call(uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(wd))), uintptr(unsafe.Pointer(&freeBytes)), nil, nil)
 	if err != nil {
 		return 0, err
