@@ -10,7 +10,7 @@ function Login(props) {
   const { onLogin } = useAuth();
 
   useEffect(() => {
-    props.setIsLoading(false);
+    props.loadingHandler("login", "pop");
   });
 
   return (

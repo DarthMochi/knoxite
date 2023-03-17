@@ -49,6 +49,7 @@ require (
 require (
 	github.com/Luzifer/go-openssl/v4 v4.1.0
 	github.com/natefinch/lumberjack v2.0.0+incompatible
+	github.com/rs/cors v1.8.3
 )
 
 require (

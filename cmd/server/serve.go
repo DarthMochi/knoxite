@@ -7,16 +7,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
+	"io/ioutil"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/knoxite/knoxite/cmd/server/config"
 	"github.com/knoxite/knoxite/cmd/server/utils"
 	"github.com/miekg/dns"
+	"github.com/rs/cors"
 	"github.com/spf13/cobra"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -31,6 +36,26 @@ type App struct {
 type FileStat struct {
 	Path string
 	Size int64
+}
+
+type ServerConfig struct {
+	Port         string
+	Hostname     string
+	ServerScheme string
+}
+
+func redirectToTls(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "https://"+r.Host+r.URL.String(), http.StatusMovedPermanently)
+}
+
+func makeHTTPServer(handler http.Handler, port string) *http.Server {
+	return &http.Server{
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		Handler:      handler,
+		Addr:         ":" + port,
+	}
 }
 
 func (a *App) initialize(dbURI string) error {
@@ -127,19 +152,6 @@ func (a *App) getClientByName(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(clientJSON))
 }
 
-func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
-	if err != nil {
-		WarningLogger.Println(errNoAuth)
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-
-	clientJSON, _ := json.Marshal(client)
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(clientJSON))
-}
-
 func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
 		WarningLogger.Println(errNoAuth)
@@ -192,14 +204,14 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (a *App) totalAvailableStorageSize(w http.ResponseWriter, r *http.Request) {
+func (a *App) totalAvailableSpace(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(w, r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	size, err := a.AvailableSpace(0)
+	size, err := a.AvailableSpace()
 	if err != nil {
 		WarningLogger.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -214,6 +226,172 @@ func (a *App) totalAvailableStorageSize(w http.ResponseWriter, r *http.Request) 
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(sizeJSON))
+}
+
+func (a *App) totalAvailableSpaceMinusQuota(w http.ResponseWriter, r *http.Request) {
+	if err := a.authenticateUser(w, r); err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	size, err := a.AvailableSpaceMinusQuota()
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	sizeJSON, err := json.Marshal(size)
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(sizeJSON))
+}
+
+func (a *App) totalAvailableSpacePlusQuota(w http.ResponseWriter, r *http.Request) {
+	if err := a.authenticateUser(w, r); err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+
+	var client Client
+	a.DB.First(&client, "id = ?", vars["id"])
+
+	size, err := a.AvailableSpacePlusQuota(client.Quota)
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	sizeJSON, err := json.Marshal(size)
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(sizeJSON))
+}
+
+func (a *App) totalUsedSpace(w http.ResponseWriter, r *http.Request) {
+	if err := a.authenticateUser(w, r); err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	size, err := a.UsedSpace()
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	sizeJSON, err := json.Marshal(size)
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(sizeJSON))
+}
+
+func (a *App) totalOccupiedQuota(w http.ResponseWriter, r *http.Request) {
+	if err := a.authenticateUser(w, r); err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	size := a.TotalQuota()
+	sizeJSON, err := json.Marshal(size)
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(sizeJSON))
+}
+
+func (a *App) configurationInformation(w http.ResponseWriter, r *http.Request) {
+	if err := a.authenticateUser(w, r); err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	var config ServerConfig
+	config.Port = cfg.HTTPPort
+	config.Hostname = cfg.AdminHostname
+	config.ServerScheme = "http"
+
+	if cfg.UseHTTPS {
+		config.ServerScheme = "https"
+		config.Port = cfg.HTTPSPort
+	}
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(configJSON))
+}
+
+func (a *App) enableCors(w *http.ResponseWriter) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+}
+
+func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+
+	path := filepath.Clean(r.URL.Path)
+	if path == "/" || ((strings.HasPrefix(path, "/admin") || strings.HasPrefix(path, "/login")) && filepath.Ext(path) == "") {
+		path = "index.html"
+	}
+	path = strings.TrimPrefix(path, "/")
+
+	file, err := uiFS.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			InfoLogger.Println("file", path, "not found:", err)
+			http.NotFound(w, r)
+			return
+		}
+		InfoLogger.Println("file", path, "connot be read:", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	contentType := mime.TypeByExtension(filepath.Ext(path))
+	w.Header().Set("Content-Type", contentType)
+	if strings.HasPrefix(path, "static/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000")
+	}
+
+	stat, err := file.Stat()
+	if err == nil && stat.Size() > 0 {
+		w.Header().Set("Content-length", fmt.Sprintf("%d", stat.Size()))
+	}
+
+	n, _ := io.Copy(w, file)
+	InfoLogger.Println("file", path, "copied", n, "bytes")
 }
 
 var (
@@ -259,14 +437,19 @@ var (
 			InfoLogger.Println("starting server")
 			router := mux.NewRouter()
 
-			router.HandleFunc("/login", a.login).Methods("POST")
-			router.HandleFunc("/clients", a.createClient).Methods("POST")
-			router.HandleFunc("/clients", a.getAllClients).Methods("GET", "OPTIONS")
-			router.HandleFunc("/clients/{id}", a.getClient).Methods("GET")
-			router.HandleFunc("/clients/{name}", a.getClientByName).Methods("GET")
-			router.HandleFunc("/clients/{id}", a.updateClient).Methods("PUT")
-			router.HandleFunc("/clients/{id}", a.deleteClient).Methods("DELETE")
-			router.HandleFunc("/storage_size", a.totalAvailableStorageSize).Methods("GET")
+			router.HandleFunc("/api/login", a.login).Methods("POST", "OPTIONS")
+			router.HandleFunc("/api/clients", a.createClient).Methods("POST")
+			router.HandleFunc("/api/clients", a.getAllClients).Methods("GET", "OPTIONS")
+			router.HandleFunc("/api/clients/{id}", a.getClient).Methods("GET")
+			router.HandleFunc("/api/clients/{name}", a.getClientByName).Methods("GET")
+			router.HandleFunc("/api/clients/{id}", a.updateClient).Methods("PUT")
+			router.HandleFunc("/api/clients/{id}", a.deleteClient).Methods("DELETE")
+			router.HandleFunc("/api/storage_size", a.totalAvailableSpace).Methods("GET")
+			router.HandleFunc("/api/storage_size_minus_quota", a.totalAvailableSpaceMinusQuota).Methods("GET")
+			router.HandleFunc("/api/storage_size_plus_quota", a.totalAvailableSpacePlusQuota).Methods("GET")
+			router.HandleFunc("/api/used_space", a.totalUsedSpace).Methods("GET")
+			router.HandleFunc("/api/total_quota", a.totalOccupiedQuota).Methods("GET")
+			router.HandleFunc("/api/server_config", a.configurationInformation).Methods("GET")
 
 			router.HandleFunc("/upload", a.upload).Methods("POST")
 			router.PathPrefix("/download/").HandlerFunc(a.download).Methods("GET")
@@ -274,10 +457,15 @@ var (
 			router.PathPrefix("/mkdir/").HandlerFunc(a.mkdir).Methods("GET")
 			router.PathPrefix("/delete").HandlerFunc(a.delete).Methods("DELETE")
 			router.HandleFunc("/getClientByAuthCode", a.getClientByAuthCode).Methods("GET")
-			if os.Getenv("APP_ENV") == "production" {
-				fsWebUI := http.FileServer(http.Dir(filepath.Join(uiPath, "build")))
-				router.PathPrefix("/").Handler(http.StripPrefix("/", fsWebUI)).Methods("GET")
-			}
+			router.HandleFunc("/download_cert", a.downloadCert).Methods("GET")
+
+			// router.HandleFunc("/", a.handleStatic).Methods("GET")
+			// fsWebUI := http.FileServer(uiFS.Open())
+			router.PathPrefix("/").HandlerFunc(a.handleStatic).Methods("GET")
+			// if os.Getenv("APP_ENV") == "production" {
+			// 	fsWebUI := http.FileServer(http.Dir(filepath.Join(uiPath, "build")))
+			// 	router.PathPrefix("/").Handler(http.StripPrefix("/", fsWebUI)).Methods("GET")
+			// }
 			router.Use(loggingMiddleware)
 			http.Handle("/", router)
 			router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
@@ -286,17 +474,36 @@ var (
 				InfoLogger.Println(tpl, err1, met, err2)
 				return nil
 			})
+
 			if cfg.UseHTTPS {
 				certPem := filepath.Join(certsPath, "knoxite-server-cert.pem")
 				keyPem := filepath.Join(certsPath, "knoxite-server-key.pem")
-				err = http.ListenAndServeTLS(":"+cfg.AdminUIPort, certPem, keyPem, router)
-			} else {
-				err = http.ListenAndServe(":"+cfg.AdminUIPort, nil)
+				go func() {
+					c := cors.New(cors.Options{
+						AllowedOrigins:   []string{"*"},
+						AllowCredentials: true,
+					})
+					httpsSrv := makeHTTPServer(c.Handler(router), cfg.HTTPSPort)
+
+					err = httpsSrv.ListenAndServeTLS(certPem, keyPem)
+					if err != nil {
+						ErrorLogger.Println("httpsSrc.ListenAndServeTLS() failed with " + err.Error())
+					}
+				}()
+
 			}
+
+			c := cors.New(cors.Options{
+				AllowedOrigins:   []string{"*"},
+				AllowCredentials: true,
+			})
+			httpSrv := makeHTTPServer(c.Handler(router), cfg.HTTPPort)
+			err = httpSrv.ListenAndServe()
 			if err != nil {
 				ErrorLogger.Println("port occupied")
 				return err
 			}
+
 			return nil
 		},
 	}
@@ -311,13 +518,35 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+var uiFS fs.FS
+
 func init() {
-	if err := setPaths(); err != nil {
+	var err error
+	if err = setPaths(); err != nil {
 		fmt.Println(err)
+		os.Exit(-1)
+	}
+
+	uiFS, err = fs.Sub(UI, "ui/build")
+	if err != nil {
+		fmt.Printf("failed to get ui fs: %v\n", err)
 		os.Exit(-1)
 	}
 	serveCmd.PersistentFlags().StringVarP(&cfgFileName, "configURL", "C", config.DefaultPath(), "Path to configuration file")
 	RootCmd.AddCommand(serveCmd)
+}
+
+func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
+	client, err := a.authenticateClient(w, r)
+	if err != nil {
+		WarningLogger.Println(errNoAuth)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	clientJSON, _ := json.Marshal(client)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(clientJSON))
 }
 
 func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Client, error) {
@@ -447,6 +676,24 @@ func (a *App) UploadFile(client Client, filePath string, fileContent string) (in
 	}
 	a.DB.Model(&client).Where("id = ?", client.ID).Updates(&client)
 	return diff, nil
+}
+
+func (a *App) downloadCert(w http.ResponseWriter, r *http.Request) {
+	_, err := a.authenticateClient(w, r)
+
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	data, err := ioutil.ReadFile(filepath.Join(certsPath, "knoxite-server-cert.pem"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }
 
 // download logic.
@@ -633,16 +880,44 @@ func (a *App) DeleteFile(client Client, filePath string) error {
 	return nil
 }
 
-func (a *App) AvailableSpace(quota uint64) (uint64, error) {
+func (a *App) AvailableSpacePlusQuota(quota uint64) (uint64, error) {
+	space, err := a.AvailableSpaceMinusQuota()
+	if err != nil {
+		return 0, err
+	}
+
+	return space + quota, nil
+}
+
+func (a *App) AvailableSpaceMinusQuota() (uint64, error) {
+	space, err := a.AvailableSpace()
+	if err != nil {
+		return 0, err
+	}
+
+	return space - a.TotalQuota(), nil
+}
+
+func (a *App) AvailableSpace() (uint64, error) {
 	statOS := &StatOS{}
 	space, err := statOS.GetAvailableStorageSpace()
 	if err != nil {
 		return 0, err
 	}
 
+	return space, nil
+}
+
+func (a *App) TotalQuota() uint64 {
 	var totalQuota uint64
 	a.DB.Table("clients").Select("sum(quota)").Row().Scan(&totalQuota)
-	fmt.Println(totalQuota)
 
-	return space - totalQuota + quota, nil
+	return totalQuota
+}
+
+func (a *App) UsedSpace() (uint64, error) {
+	var usedSpace uint64
+	a.DB.Table("clients").Select("sum(used_space)").Row().Scan(&usedSpace)
+
+	return usedSpace, nil
 }

@@ -11,8 +11,9 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "./AuthProvider";
 
-const Navigation = ({token}) => {
+const Navigation = () => {
   const { onLogout } = useAuth();
+  const { token } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   

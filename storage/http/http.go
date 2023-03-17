@@ -14,15 +14,21 @@ package http
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/knoxite/knoxite"
+	gap "github.com/muesli/go-app-paths"
 )
 
 // HTTPStorage stores data on a remote HTTP server.
@@ -82,20 +88,96 @@ func (backend *HTTPStorage) Description() string {
 
 func (backend *HTTPStorage) getHTTPClient() *http.Client {
 	if backend.url.Scheme == "https" {
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // <--- Problem
+		client := backend.getHTTPSClient()
+		if client != nil {
+			return client
 		}
-		client := &http.Client{
-			Transport: tr,
-			Timeout:   time.Second * 10,
+	}
+
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+	return client
+}
+
+func (backend *HTTPStorage) getHTTPSClient() *http.Client {
+	var certDirPath string
+
+	scope := gap.NewScope(gap.User, "knoxite")
+	dataPaths, err := scope.DataDirs()
+	if err != nil {
+		return nil
+	}
+
+	if len(dataPaths) > 0 {
+		certDirPath = dataPaths[0]
+	}
+
+	if _, err = os.Stat(certDirPath); os.IsNotExist(err) {
+		if err = os.MkdirAll(certDirPath, 0755); err != nil {
+			return nil
 		}
-		return client
-	} else {
-		client := &http.Client{
+	}
+
+	certPath := filepath.Join(certDirPath, "knoxite-server-cert.pem")
+
+	var cert []byte
+	tlsConfig := &tls.Config{
+		RootCAs:            x509.NewCertPool(),
+		InsecureSkipVerify: true,
+	}
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	client := &http.Client{
+		Timeout:   time.Second * 10,
+		Transport: transport,
+	}
+
+	if _, err := os.Stat(certPath); os.IsNotExist(err) {
+		url := strings.Replace(backend.url.String(), "https", "http", 1)
+		req, err := http.NewRequest(http.MethodGet, url+"/download_cert", nil)
+		if err != nil {
+			return nil
+		}
+		req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
+		httpClient := &http.Client{
 			Timeout: time.Second * 10,
 		}
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil
+		}
+		defer resp.Body.Close()
+
+		cert, err := io.ReadAll(resp.Body)
+
+		if err != nil {
+			return nil
+		}
+
+		if err = ioutil.WriteFile(certPath, cert, 0600); err != nil {
+			return nil
+		}
+	} else {
+		cert, err = ioutil.ReadFile(certPath)
+		if err != nil {
+			return nil
+		}
+	}
+
+	if cert != nil {
+		ok := tlsConfig.RootCAs.AppendCertsFromPEM(cert)
+		if !ok {
+			return nil
+		}
+
 		return client
 	}
+
+	return nil
 }
 
 // AvailableSpace returns the free space on this backend.

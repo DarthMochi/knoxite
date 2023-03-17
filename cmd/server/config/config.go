@@ -20,7 +20,8 @@ var cfgFileName = "knoxite-server.conf"
 type ServerConfig struct {
 	AdminUserName string `toml:"admin_user_name" comment:"User name to authorize api calls"`
 	AdminPassword string `toml:"admin_password" comment:"Password to authorize admin user"`
-	AdminUIPort   string `toml:"admin_ui_port" comment:"Port to run the server api on"`
+	HTTPPort      string `toml:"http_port" comment:"Port to run the server api on"`
+	HTTPSPort     string `toml:"https_port" comment:"Port to run the server api on with https"`
 	StoragesPath  string `toml:"repositories_path" comment:"Path to store the repositories of clients"`
 	DBFileName    string `toml:"db_file_name" comment:"Database file name"`
 	UseHostname   bool   `toml:"use_hostname" comment:"Use hostname as dns"`

@@ -23,11 +23,12 @@ const sizesDict = {
 };
 
 export const fetchData = async (url, options) => {
-    const response = await fetch(url, options);
-    // if (!response.ok) {
-    //     throw new Error(`Error fetching data. Server replied ${response.status}`);
-    // }
-    return response;
+  // options.headers["Access-Control-Allow-Origin"] = "*";
+  const response = await fetch("/api" + url, options);
+  // if (!response.ok) {
+  //     throw new Error(`Error fetching data. Server replied ${response.status}`);
+  // }
+  return response;
 };
 
 export const stepsToString = (steps) => (stepsDict)[steps];
@@ -62,27 +63,27 @@ export const getSizeOptions = (storageSizeLabel) => {
   return options;
 }
 
-export const getClient = (setIsLoading, id, token, setClientToken) => {
-  setIsLoading(true);
-  const url = "/clients/" + id;
-  const options = {
-    method: 'GET',
-    headers: {
-        'Authorization': 'Basic ' + token,
-        'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: "name=" + id,
-  };
-  fetchData(url, options)
-  .then(result => result.json())
-  .then(result => {
-    setClientToken(result.AuthCode);
-    setIsLoading(false);
-  }, err => {
-    console.log(err);
-    setIsLoading(false);
-  });
-};
+// export const getClient = (loadingHandler, id, token, setClientToken) => {
+//   loadingHandler("get_client", "push");
+//   const url = "/clients/" + id;
+//   const options = {
+//     method: 'GET',
+//     headers: {
+//         'Authorization': 'Basic ' + token,
+//         'Content-Type': 'application/x-www-form-urlencoded',
+//     },
+//     body: "name=" + id,
+//   };
+//   fetchData(url, options)
+//   .then(result => result.json())
+//   .then(result => {
+//     setClientToken(result.AuthCode);
+//     loadingHandler("get_client", "pop");
+//   }, err => {
+//     console.log(err);
+//     loadingHandler("get_client", "pop");
+//   });
+// };
 
 export const fetchClient = async (token, id) => {
   const url = "/clients/" + id;
@@ -111,8 +112,63 @@ export const fetchClients = async (token) => {
   });
 };
 
-export const fetchStorageSize = async (token) => {
+export const fetchStorageSpace = async (token) => {
   const url = "/storage_size";
+  const options = {
+    headers: {
+      'Authorization': 'Basic ' + token,
+    },
+  };
+  const response = await fetchData(url, options);
+  return await response.json();
+};
+
+export const fetchStorageSpaceMinusQuota = async (token) => {
+  const url = "/storage_size_minus_quota";
+  const options = {
+    headers: {
+      'Authorization': 'Basic ' + token,
+    },
+  };
+  const response = await fetchData(url, options);
+  return await response.json();
+};
+
+export const fetchStorageSizePlusQuota = async (token, client) => {
+  const url = "/storage_size_plus_quota?id=" + client.ID;
+  const options = {
+    headers: {
+      'Authorization': 'Basic ' + token,
+    },
+  };
+  const response = await fetchData(url, options);
+  return await response.json();
+};
+
+export const fetchUsedSpace = async (token) => {
+  const url = "/used_space";
+  const options = {
+    headers: {
+      'Authorization': 'Basic ' + token,
+    },
+  };
+  const response = await fetchData(url, options);
+  return await response.json();
+};
+
+export const fetchTotalQuota = async (token) => {
+  const url = "/total_quota";
+  const options = {
+    headers: {
+      'Authorization': 'Basic ' + token,
+    },
+  };
+  const response = await fetchData(url, options);
+  return await response.json();
+};
+
+export const fetchServerInformation = async (token) => {
+  const url = "/server_config";
   const options = {
     headers: {
       'Authorization': 'Basic ' + token,

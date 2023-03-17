@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Button, Card, Form, Container, Dropdown } from 'react-bootstrap';
 import Slider from 'react-rangeslider';
 import 'react-rangeslider/lib/index.css';
@@ -13,35 +13,73 @@ import {
   updateClientRequest, 
   getSizeOptions,
   sizeConversion,
+  fetchStorageSizePlusQuota,
+  fetchStorageSpace,
 } from './utils.js';
 
 const ClientForm = ({
   client, 
   setClient, 
   setError, 
-  setIsLoading, 
-  storageSizeInBytes, 
-  storageSizeLabel}) => {
+  loadingHandler}) => {
     const { t } = useTranslation();
     const { token } = useAuth();
     const navigate = useNavigate();
-    const options = getSizeOptions(storageSizeLabel);
-    const [clientSizeLabel, setClientSizeLabel] = useState(storageSizeLabel);
-    const [quota, setQuota] = useState(convertSizeByStep(client.Quota, exponentSwitch(clientSizeLabel)));
-    const [maxStorageSize, setMaxStorageSize] = useState(sizeConversion(storageSizeInBytes + client.Quota, 0)[0]);
-    const [usedSpace, setUsedSpace] = useState(convertSizeByStep(client.UsedSpace, exponentSwitch(clientSizeLabel)));
+    const [options, setOptions] = useState([]);
+    const [clientSizeLabel, setClientSizeLabel] = useState(0);
+    const [quota, setQuota] = useState(0);
+    const [maxStorageSize, setMaxStorageSize] = useState(0);
+    const [usedSpace, setUsedSpace] = useState(0);
+    const isCalledRef = useRef();
+
+
+    useEffect(() => {
+    async function load() {
+      loadingHandler("load_form", "push");
+      var storage_size = await fetchStorageSpace(token).finally(() => {
+        loadingHandler("load_form", "pop");
+      });
+      var storage_size_plus_quota = storage_size;
+      if (client !== undefined) {
+        storage_size_plus_quota = await fetchStorageSizePlusQuota(token, client.Quota);
+      }
+
+      var label = sizeConversion(storage_size, 0)[1];
+
+      setOptions(getSizeOptions(label));
+      setClientSizeLabel(label);
+      setQuota(convertSizeByStep(client.Quota, exponentSwitch(label)));
+      setMaxStorageSize(sizeConversion(storage_size_plus_quota, 0)[0]);
+      setUsedSpace(convertSizeByStep(client.UsedSpace, exponentSwitch(label)));
+    }
+
+    if(token !== null && !isCalledRef.current) {
+      load();
+      isCalledRef.current = true;
+    }
+  }, [
+    token,
+    client,
+    setOptions,
+    setClientSizeLabel,
+    setQuota,
+    setMaxStorageSize,
+    setUsedSpace,
+    loadingHandler,
+    isCalledRef,
+  ]);
 
     const createClient = async () => {
-      setIsLoading(true);
-      let response = await createClientRequest(token, client);
+      loadingHandler("create_client", "push");
+      let response = await createClientRequest(token, client).finally(() => {
+        loadingHandler("create_client", "pop");
+      });
       if(response.ok) {
         let newClientID = response.headers.get("Location").slice(-2);
         client.ID = newClientID;
-        setIsLoading(false);
         setClient(null);
         navigate("/admin/clients");
       } else {
-        setIsLoading(false);
         setClient(null);
         setError(response.error);
         navigate("/login");
@@ -49,14 +87,14 @@ const ClientForm = ({
     };
 
     const updateClient = async () => {
-      setIsLoading(true);
-      let response = await updateClientRequest(token, client);
+      loadingHandler("update_client", "push");
+      let response = await updateClientRequest(token, client).finally(() => {
+        loadingHandler("update_client", "pop");
+      });
       if(response.ok) {
-        setIsLoading(false);
         setClient(null);
         navigate("/admin/clients");
       } else {
-        setIsLoading(false);
         setClient(null);
         setError(response.error);
         navigate("/login");
@@ -65,7 +103,6 @@ const ClientForm = ({
 
     const handleSubmit = (event) => {
         event.preventDefault();
-        setIsLoading(true);
         var c = client;
         c.Quota = sizeToBytes(quota, clientSizeLabel);
         setClient(c);

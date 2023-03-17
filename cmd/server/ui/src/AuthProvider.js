@@ -1,11 +1,11 @@
-import React, { useState, createContext, useContext, useEffect } from "react";
+import React, { createContext, useContext, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { fetchData } from "./utils.js";
 import bcrypt from "bcryptjs-react";
 
 const AuthContext = createContext(null);
 
-const AuthProvider = ({token, setToken, children}) => {
+const AuthProvider = ({token, setToken, loadingHandler, children}) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -17,10 +17,16 @@ const AuthProvider = ({token, setToken, children}) => {
         navigate("/admin/clients");
       }
     }
-  }, [navigate, token, location]);
+  }, [
+    navigate, 
+    token,
+    setToken,
+    location
+  ]);
 
   const handleLogin = (event) => {
     event.preventDefault();
+    loadingHandler("login", "push");
     var username = event.target[0].value;
     var password = event.target[1].value;
     var hash = bcrypt.hashSync(password, 14);  // has to be 14 (why?)

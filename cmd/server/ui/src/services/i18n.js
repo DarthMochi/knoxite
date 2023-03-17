@@ -117,7 +117,7 @@ i18next
     interpolation: {
       escapeValue: false,
     },
-    debug: window.env.NODE_ENV === 'development',
+    debug: true,
   });
 
 export default i18next;

@@ -1,15 +1,49 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Table, Card, Container } from 'react-bootstrap';
 import 'react-rangeslider/lib/index.css';
 import CodeBlock from './CodeBlock';
 import { useTranslation } from "react-i18next";
+import { useAuth } from "./AuthProvider";
+import { fetchServerInformation } from "./utils.js";
 
 const ClientInfo = ({client}) => {
     const { t } = useTranslation();
-    const hostname = window.env.ADMIN_HOSTNAME;
-    const port = window.env.ADMIN_UI_PORT;
-    const protocol = window.env.SERVER_SCHEME;
-    const repoUrl = protocol + "://" + client.AuthCode + "@" + hostname + (port !== "80" ? ":" + port + "" : "");
+    const { token } = useAuth();
+    const [hostname, setHostname] = useState("localhost");
+    const [port, setPort] = useState("80");
+    const [protocol, setProtocol] = useState("http");
+    const [repoUrl, setRepoUrl] = useState();
+
+    const updateRepoUrl = useCallback(() => {
+      setRepoUrl(protocol + "://" + client.AuthCode + "@" + hostname + (port !== "80" ? ":" + port : ""))
+    }, [
+      setRepoUrl,
+      protocol,
+      hostname,
+      port,
+      client
+    ]);
+
+    const loadServerInformation = useCallback(() => {
+      fetchServerInformation(token).then((res) => {
+        setHostname(res.Hostname);
+        setPort(res.Port);
+        setProtocol(res.ServerScheme);
+      });
+    }, [
+      token,
+      setHostname,
+      setPort,
+      setProtocol,
+    ]);
+
+    useEffect(() => {
+      loadServerInformation();
+      updateRepoUrl();
+    }, [
+      loadServerInformation,
+      updateRepoUrl
+    ]);
 
     return (
       <Container id="tutorial">

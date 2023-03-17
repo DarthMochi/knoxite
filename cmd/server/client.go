@@ -30,7 +30,7 @@ func (a *App) NewClient(name string, quotaString string) (*url.URL, error) {
 		return u, err
 	}
 
-	availableSpace, err := a.AvailableSpace(0)
+	availableSpace, err := a.AvailableSpaceMinusQuota()
 	if err != nil {
 		WarningLogger.Println(err)
 		return u, err
@@ -86,7 +86,7 @@ func (a *App) UpdateClient(clientId string, name string, quotaString string) err
 		return errInvalidBody
 	}
 
-	availableSpace, err := a.AvailableSpace(client.Quota)
+	availableSpace, err := a.AvailableSpacePlusQuota(client.Quota)
 	if err != nil {
 		WarningLogger.Println(errNoSpace)
 		return errNoSpace

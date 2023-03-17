@@ -9,14 +9,12 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"log"
 	"math/big"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -44,7 +42,6 @@ var (
 	WarningLogger *log.Logger
 	InfoLogger    *log.Logger
 	ErrorLogger   *log.Logger
-	uiPath        string
 	certsPath     string
 	logPath       string
 	setupCmd      = &cobra.Command{
@@ -72,26 +69,9 @@ var (
 				return err
 			}
 
-			if os.Getenv("APP_ENV") == "production" {
-				if err := initYarnInstallAndBuild(); err != nil {
-					defer os.Remove(cfg.DBFileName)
-					defer os.Remove(filepath.Join(uiPath, "build"))
-					ErrorLogger.Println(err.Error())
-					return err
-				}
-			}
-
-			if err := initDotEnv(); err != nil {
-				defer os.Remove(cfg.DBFileName)
-				defer os.Remove(filepath.Join(uiPath, "build"))
-				ErrorLogger.Println(err.Error())
-				return err
-			}
-
 			if cfg.UseHTTPS {
 				if err := initCerts(); err != nil {
 					defer os.Remove(cfg.DBFileName)
-					defer os.Remove(filepath.Join(uiPath, "build"))
 					defer os.Remove(certsPath)
 					ErrorLogger.Println(err.Error())
 					return err
@@ -109,7 +89,6 @@ func setPaths() error {
 			return err
 		}
 
-		uiPath = filepath.Join(wd, "cmd", "server", "ui")
 		certsPath = filepath.Join(wd, "cmd", "server", "certs")
 		logPath = filepath.Join(wd, "cmd", "server", "logs")
 	} else if os.Getenv("APP_ENV") == "test" {
@@ -118,7 +97,6 @@ func setPaths() error {
 			return err
 		}
 
-		uiPath = filepath.Join(wd, "ui")
 		certsPath = filepath.Join(wd, "certs")
 		logPath = filepath.Join(wd, "logs")
 	} else {
@@ -138,7 +116,6 @@ func setPaths() error {
 			}
 		}
 
-		uiPath = filepath.Join(dataDirs[0], "ui")
 		certsPath = filepath.Join(dataDirs[0], "certs")
 		os.Setenv("APP_ENV", "production")
 	}
@@ -154,7 +131,8 @@ func init() {
 	setupCmd.PersistentFlags().StringVarP(&cfg.AdminPassword, "password", "p", "", "Admin password")
 	setupCmd.PersistentFlags().StringVarP(&cfg.AdminUserName, "username", "u", "", "Admin username")
 	setupCmd.PersistentFlags().StringVarP(&cfg.DBFileName, "dbfilename", "d", "", "File name for sqlite database")
-	setupCmd.PersistentFlags().StringVarP(&cfg.AdminUIPort, "port", "P", "42024", "Port for server api")
+	setupCmd.PersistentFlags().StringVarP(&cfg.HTTPPort, "httpport", "P", "42024", "Port for server api")
+	setupCmd.PersistentFlags().StringVarP(&cfg.HTTPSPort, "httpsport", "t", "42025", "Port for server api")
 	setupCmd.PersistentFlags().StringVarP(&cfg.StoragesPath, "storagepath", "s", "", "Path to client storages")
 	setupCmd.PersistentFlags().StringVarP(&configURL, "configurl", "C", config.DefaultPath(), "Path to configuration file")
 	setupCmd.PersistentFlags().BoolVarP(&cfg.UseHostname, "usehostname", "n", true, "Use hostname and dns, default=true")
@@ -201,51 +179,6 @@ func initStoragePath(storageURL string) error {
 
 	storageDir := filepath.Join(path.Path)
 	if err := os.MkdirAll(storageDir, 0755); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func initYarnInstallAndBuild() error {
-	InfoLogger.Println("Installing yarn packages (this could take a while) ...")
-	cmd := exec.Command("yarn", "install")
-	cmd.Dir = uiPath
-	cmd.Stdout = os.Stdout
-	err := cmd.Run()
-	if err != nil {
-		return err
-	}
-	scheme := "http://"
-	if cfg.UseHTTPS {
-		scheme = "https://"
-	}
-	httpProxy := scheme + "localhost:" + cfg.AdminUIPort
-
-	// Rebuild package.json
-	file, err := os.ReadFile(filepath.Join(uiPath, "package.json")) //Read File
-	if err != nil {
-		return err
-	}
-	var p PackageJSON
-	json.Unmarshal(file, &p)
-	p.Proxy = httpProxy
-	result, err := json.MarshalIndent(p, "", " ")
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(filepath.Join(uiPath, "package.json"), result, 0644)
-	if err != nil {
-		return err
-	}
-
-	InfoLogger.Println("Building admin user interface (this could take a while) ...")
-	cmd = exec.Command("yarn", "build")
-	cmd.Dir = uiPath
-	cmd.Stdout = os.Stdout
-	err = cmd.Run()
-	if err != nil {
 		return err
 	}
 
@@ -414,28 +347,5 @@ func initCerts() error {
 		return err
 	}
 
-	return nil
-}
-
-func initDotEnv() error {
-	f, err := os.OpenFile(filepath.Join(uiPath, ".env"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	scheme := "http"
-	if cfg.UseHTTPS {
-		scheme = "https"
-	}
-
-	_, err = f.WriteString(
-		"ADMIN_HOSTNAME=" + cfg.AdminHostname + "\n" +
-			"ADMIN_UI_PORT=" + cfg.AdminUIPort + "\n" +
-			"SERVER_SCHEME=" + scheme + "\n",
-	)
-	if err != nil {
-		return err
-	}
 	return nil
 }

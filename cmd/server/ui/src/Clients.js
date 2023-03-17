@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrashAlt, faEdit, faPlus, faInfo, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { Table, Button, Card, } from "react-bootstrap";
@@ -8,89 +8,127 @@ import {
   sizeConversion, 
   deleteClientRequest,
   fetchClients,
-  fetchStorageSize,
   convertSizeByStep,
   exponentSwitch,
+  fetchTotalQuota,
+  fetchUsedSpace,
+  fetchStorageSpace,
 } from "./utils.js";
 import { useNavigate } from "react-router-dom";
 
 
 const Clients = ({
   setClients, 
-  setIsLoading, 
+  loadingHandler, 
   setError, 
   clients, 
   setClient, 
-  storageSizeLabel,
-  setStorageSizeLabel, 
-  setAlert, 
-  setStorageSizeInBytes,
-  storageSizeInBytes}) => {
+  setAlert,
+  totalQuota, 
+  setTotalQuota,
+  usedSpace, 
+  setUsedSpace,
+  storageSpace, 
+  setStorageSpace
+  }) => {
   const { t } = useTranslation();
   const { token } = useAuth();
-  const isCalledRef = useRef(false);
+  const clientsRef = useRef(false);
+  const totalQuotaRef = useRef(false);
+  const usedSpaceRef = useRef(false);
+  const storageSpaceRef = useRef(false);
   const navigate = useNavigate();
-  const [totalUsedSpace, setTotalUsedSpace] = useState(0);
-  const [totalQuota, setTotalQuota] = useState(0);
-  const [totalSpace, setTotalSpace] = useState(storageSizeInBytes);
 
-  useEffect(() => {
-    if(token === null) {
-      setIsLoading(false);
-      navigate("/admin/login");
-    }
-    setClient(null);
-
-    if((clients || clients.length === 0) && !isCalledRef.current) {
-      setTotalQuota(0);
-      setTotalUsedSpace(0);
-      setIsLoading(true);
-
+  const loadClients = useCallback(() => {
+    if(!clientsRef.current) {
+      clientsRef.current = true;
+      loadingHandler("load_clients", "push");
       fetchClients(token).then((cs) => {
-        if (cs !== null) {
-          setClients(cs);
+        if (cs === null) {
+          cs = []
         }
-      });
-    }
-      
-    if(!isCalledRef.current) {
-      fetchStorageSize(token).then((storageInfo) => {
-        setStorageSizeInBytes(storageInfo);
-        setTotalSpace(storageInfo);
-        var label = sizeConversion(storageInfo, 0)[1];
-        setStorageSizeLabel(label);
-
-        var [tusp, tquo, tsp] = [0, 0, storageInfo];
-
-        if(clients.length > 0) {
-          clients.forEach((c, _index) => {
-            tusp += c.UsedSpace;
-            tquo += c.Quota;
-            tsp += c.Quota;
-          });
-        }
-        setTotalQuota(tquo);
-        setTotalUsedSpace(tusp);
-        setTotalSpace(tsp);
-        isCalledRef.current = true;
-        setIsLoading(false);
+        setClients(cs);
+        loadingHandler("load_clients", "pop");
       });
     }
   }, [
-    totalSpace,
-    totalQuota,
-    storageSizeInBytes,
-    setClients, 
-    setClient,
-    clients, 
-    setStorageSizeLabel, 
-    setIsLoading, 
-    setTotalUsedSpace,
-    setTotalQuota,
-    setTotalSpace,
-    setStorageSizeInBytes,
     token,
-    isCalledRef,
+    setClients,
+    loadingHandler
+  ]);
+
+  const loadTotalQuota = useCallback(() => {
+    if(!totalQuotaRef.current) {
+      totalQuotaRef.current = true;
+      loadingHandler("total_quota", "push");
+      fetchTotalQuota(token).then((tq) => {
+        if(tq != null) {
+          setTotalQuota(tq);
+        } else {
+          setTotalQuota(0);
+        }
+        loadingHandler("total_quota", "pop");
+      });
+    }
+  }, [
+    token,
+    setTotalQuota,
+    loadingHandler,
+  ]);
+
+  const loadUsedSpace = useCallback(() => {
+    if(!usedSpaceRef.current) {
+      usedSpaceRef.current = true;
+      loadingHandler("used_space", "push");
+      fetchUsedSpace(token).then((us) => {
+        if(us !== null) {
+          setUsedSpace(us);
+        } else {
+          setUsedSpace(0);
+        }
+        loadingHandler("used_space", "pop");
+      });
+    }
+  }, [
+    token,
+    setUsedSpace,
+    loadingHandler,
+  ])
+
+  const loadStorageSpace = useCallback(() => {
+    if(!storageSpaceRef.current) {
+      storageSpaceRef.current = true;
+      loadingHandler("storage_space", "push");
+      fetchStorageSpace(token).then((ss) => {
+        if(ss !== null) {
+          setStorageSpace(ss);
+        } else {
+          setStorageSpace(0);
+        }
+        loadingHandler("storage_space", "pop");
+      });
+    }
+  }, [
+    token,
+    setStorageSpace,
+    loadingHandler,
+  ]);
+
+  useEffect(() => {
+    if(token === null) {
+      navigate("/admin/login");
+    } else {
+      loadClients();
+      loadTotalQuota();
+      loadUsedSpace();
+      loadStorageSpace();
+    }
+  }, [
+    token,
+    loadClients,
+    loadTotalQuota,
+    loadUsedSpace,
+    loadStorageSpace,
     navigate,
   ]);
 
@@ -104,17 +142,18 @@ const Clients = ({
               clientData={clients} 
               token={token} 
               setClients={setClients} 
-              setIsLoading={setIsLoading} 
+              loadingHandler={loadingHandler} 
               setError={setError} 
               setAlert={setAlert} 
               setClient={setClient}
-              setStorageSizeInBytes={setStorageSizeInBytes}
-              setStorageSizeLabel={setStorageSizeLabel} />
-            <TableFooter
-              storageSizeLabel={storageSizeLabel}
-              storageSpace={totalSpace}
-              totalUsedSpace={totalUsedSpace}
-              totalQuota={totalQuota} />
+              totalQuota={totalQuota}
+              setTotalQuota={setTotalQuota}
+              usedSpace={usedSpace}
+              setUsedSpace={setUsedSpace} />
+            <TableFooter 
+              totalQuota={totalQuota}
+              usedSpace={usedSpace}
+              storageSpace={storageSpace} />
           </Table>
           <Button variant="success" onClick={() => navigate("/admin/clients/new")}>
             <FontAwesomeIcon icon={faPlus} /> {t("client.new_button")}
@@ -160,35 +199,39 @@ const TableBody = ({
   clientData, 
   setClients, 
   setClient, 
-  setIsLoading, 
+  loadingHandler, 
   setError, 
   setAlert, 
-  token, 
-  setStorageSizeInBytes,
-  setStorageSizeLabel}) => {
+  totalQuota, 
+  setTotalQuota,
+  usedSpace, 
+  setUsedSpace,
+  token}) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const deleteClient = async (client_id) => {
-      if (window.confirm(t("delete_confirm_message")) === true) {
-        setIsLoading(true);
-        let response = await deleteClientRequest(token, client_id);
-        if(response.ok) {
-          setClients(clientData.filter(client => {
-            return parseInt(client.ID) !== parseInt(client_id);
-          }));
-          fetchStorageSize(token).then((storageInfo) => {
-            setStorageSizeInBytes(storageInfo);
-            var label = sizeConversion(storageInfo, 0)[1];
-            setStorageSizeLabel(label);
-            setIsLoading(false);
-          });
-        } else {
-          setError(response.error);
-          setAlert(response.error.message);
-          setIsLoading(false);
-        }
+  const deleteClient = async (client_id, index) => {
+    if (window.confirm(t("delete_confirm_message")) === true) {
+      loadingHandler("delete_client", "push");
+      var c = clientData[index];
+      var total_quota = totalQuota - c.Quota;
+      var used_space = usedSpace - c.UsedSpace;
+      let response = await deleteClientRequest(token, client_id).finally(() => {
+        loadingHandler("delete_client", "pop");
+      });
+
+      if(response.ok) {
+        setClients(clientData.filter(client => {
+          return parseInt(client.ID) !== parseInt(client_id);
+        }));
+        setClient(null);
+        setTotalQuota(total_quota);
+        setUsedSpace(used_space);
+      } else {
+        setError(response.error);
+        setAlert(response.error.message);
       }
+    }
   };
 
   const editForm = (index) => {
@@ -229,7 +272,7 @@ const TableBody = ({
           </div>
         </td>
         <td>
-          <Button variant="danger" onClick={() => deleteClient(client.ID)}>
+          <Button variant="danger" onClick={() => deleteClient(client.ID, index)}>
             <FontAwesomeIcon icon={faTrashAlt} />
           </Button>{' '}
           <Button variant="secondary" onClick={() => editForm(index)}>
@@ -247,17 +290,52 @@ const TableBody = ({
 
 const TableFooter =({
   totalQuota,
-  totalUsedSpace,
-  storageSpace,
-  storageSizeLabel
-  }) => {
-  const UsedSpacePercentage = Math.round(100*(totalUsedSpace / storageSpace));
-  const QuotaPercentage = Math.round(100*(totalQuota / storageSpace));
-  const storageSize = convertSizeByStep(storageSpace, exponentSwitch(storageSizeLabel));
-  const quotaSize = convertSizeByStep(totalQuota, exponentSwitch(storageSizeLabel));
-  const usedSpaceSize = convertSizeByStep(totalUsedSpace, exponentSwitch(storageSizeLabel));
-  const usedSpacePGClassNames = quotaCSS(UsedSpacePercentage);
-  const quotaPGClassNames = quotaCSS(QuotaPercentage);
+  usedSpace,
+  storageSpace}) => {
+  const [storageSizeLabel, setStorageSizeLabel] = useState("");
+  const [UsedSpacePercentage, setUsedSpacePercentage] = useState(0);
+  const [QuotaPercentage, setQuotaPercentage] = useState(0);
+  const [storageSize, setStorageSize] = useState(0);
+  const [quotaSize, setQuotaSize] = useState(0);
+  const [usedSpaceSize, setUsedSpaceSize] = useState(0);
+  const [usedSpacePGClassNames, setUsedSpacePGClassNames] = useState("");
+  const [quotaPGClassNames, setQuotaPGClassNames] = useState("");
+  // const ref = useRef({totalQuota, usedSpace, storageSpace, clients});
+
+  useEffect(() => {
+    console.log(totalQuota);
+    console.log(usedSpace);
+    console.log(storageSpace);
+    if(totalQuota !== null && usedSpace !== null && storageSpace !== null) {
+      console.log("data loaded");
+      var label = sizeConversion(storageSpace, 0)[1];
+      var size = convertSizeByStep(storageSpace, exponentSwitch(label))
+      var usedSpacePercentage = Math.round(100*(usedSpace / storageSpace));
+      var quotaPercentage = Math.round(100*(totalQuota / storageSpace));
+
+      setStorageSize(size);
+      setStorageSizeLabel(label);
+      setUsedSpacePercentage(usedSpacePercentage);
+      setQuotaPercentage(quotaPercentage);
+      setQuotaSize(convertSizeByStep(totalQuota, exponentSwitch(label)));
+      setUsedSpaceSize(convertSizeByStep(usedSpace, exponentSwitch(label)));
+      setUsedSpacePGClassNames(quotaCSS(usedSpacePercentage));
+      setQuotaPGClassNames(quotaCSS(quotaPercentage));
+    }
+  }, [
+    totalQuota,
+    usedSpace,
+    storageSpace,
+    setStorageSize,
+    setStorageSizeLabel,
+    setUsedSpacePercentage,
+    setQuotaPercentage,
+    setQuotaSize,
+    setUsedSpaceSize,
+    setUsedSpacePGClassNames,
+    setQuotaPGClassNames,
+  ]);
+
   return (
     <tfoot>
       <tr>
