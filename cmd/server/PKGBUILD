@@ -1,0 +1,41 @@
+# Maintainer: Bloodchiefy <bloodchiefy@gmail.com>
+pkgname="knoxite-server-git" # '-bzr', '-git', '-hg' or '-svn'
+pkgver=r736.92e3aa2
+pkgrel=1
+pkgdesc="knoxite http(s) server backend"
+arch=('arm' 'x86_64')
+url="https://github.com/DarthMochi/knoxite"
+license=('MIT')
+makedepends=('git' 'go' 'yarn')
+source=("$pkgname::git+$url.git#branch=server")
+md5sums=('SKIP')
+
+pkgver() {
+	cd "$srcdir/$pkgname"
+	printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+	cd "$srcdir/$pkgname/cmd/server/ui"
+  yarn install
+  NODE_ENV=production yarn build
+	cd "$srcdir/$pkgname/cmd/server"
+	APP_ENV=production go build \
+    -trimpath \
+    -ldflags "-X main.Version=$pkgver -extldflags $LDFLAGS" \
+    -o "knoxite-server" .
+}
+
+check() {
+	cd "$srcdir/$pkgname"
+ 	APP_ENV=test go test ./cmd/server
+}
+
+package() {
+	cd "$srcdir/$pkgname"
+  install -Dm755 cmd/server/knoxite-server $pkgdir/usr/bin/knoxite-server
+  install -d -Dm755 $pkgdir/$HOME/.local/share/knoxite-server/certs
+  chown -R $USER:$USER $pkgdir/$HOME/.local/share/knoxite-server
+  
+  install -Dm644 LICENSE $pkgdir/usr/share/licenses/$pkgname/LICENSE
+}

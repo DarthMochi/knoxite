@@ -286,7 +286,10 @@ func (backend *HTTPStorage) WriteFile(path string, data []byte) (size uint64, er
 		Path string
 		Size int64
 	}
-	json.NewDecoder(response.Body).Decode(&file)
+	err = json.NewDecoder(response.Body).Decode(&file)
+	if err != nil {
+		return 0, err
+	}
 
 	return uint64(file.Size), nil
 }

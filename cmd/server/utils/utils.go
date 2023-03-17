@@ -142,7 +142,7 @@ func Abs(x int64) int64 {
 	return x
 }
 
-// GetLocalIP returns the non loopback local IP of the host
+// GetLocalIP returns the non loopback local IP of the host.
 func GetLocalIP() net.IP {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
