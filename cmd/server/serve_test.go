@@ -638,7 +638,7 @@ func TestLogin(t *testing.T) {
 	app.initialize(testDatabase)
 	createClient(t)
 
-	request := httptest.NewRequest(http.MethodDelete, "/login", nil)
+	request := httptest.NewRequest(http.MethodDelete, "/api/login", nil)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))

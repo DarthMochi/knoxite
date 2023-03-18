@@ -12,7 +12,7 @@ import (
 func (statOS *StatOS) GetAvailableStorageSpace() (uint64, error) {
 	h := syscall.NewLazyDLL("kernel32.dll")
 	c := h.NewProc("GetPhysicallyInstalledSystemMemory")
-	var freeBytes int64
+	var freeBytes uint64
 
 	_, _, err := c.Call(uintptr(unsafe.Pointer(&freeBytes)))
 	if err != nil {
