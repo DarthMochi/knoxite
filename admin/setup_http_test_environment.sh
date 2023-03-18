@@ -21,7 +21,7 @@ PASSWORD_HASH=$(htpasswd -bnBC 14 "" $ADMIN_PASSWORD | tr -d ':\n' | sed 's/$2y/
 TEST_CLIENT=testuser
 
 # build knoxite server
-go build ./cmd/server
+go build -o knoxite-server ./cmd/server
 
 # setup knoxite server
 ./knoxite-server setup -d $DATABASE_NAME -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -P $ADMIN_PORT -s $STORAGES -C $SERVER_CONFIG
