@@ -42,7 +42,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"1000000000"},
 	}
 
-	request := httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request := httptest.NewRequest(http.MethodPost, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + "1:" + hash))
@@ -56,7 +56,7 @@ func TestErrors(t *testing.T) {
 
 	body = url.Values{}
 
-	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPost, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	baseAuthEnc = b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
@@ -73,7 +73,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"100000000000000000000000"},
 	}
 
-	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPost, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -88,7 +88,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"1000000000000000"},
 	}
 
-	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPost, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"1000000000"},
 	}
 
-	request = httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPost, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -115,7 +115,7 @@ func TestErrors(t *testing.T) {
 
 	createClient(t)
 
-	request = httptest.NewRequest(http.MethodGet, "/clients", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/clients", nil)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -129,7 +129,7 @@ func TestErrors(t *testing.T) {
 		"id": []string{"1"},
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/clients/1", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodGet, "/api/clients/1", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -139,7 +139,7 @@ func TestErrors(t *testing.T) {
 		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
 	}
 
-	request = httptest.NewRequest(http.MethodGet, "/clients", nil)
+	request = httptest.NewRequest(http.MethodGet, "/api/clients", nil)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -154,7 +154,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"1000000000"},
 	}
 
-	request = httptest.NewRequest(http.MethodPut, "/clients/1", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPut, "/api/clients/1", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -169,7 +169,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"10000000000000000000000000000000"},
 	}
 
-	request = httptest.NewRequest(http.MethodPut, "/clients/1", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPut, "/api/clients/1", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -184,7 +184,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"10000000000000000000"},
 	}
 
-	request = httptest.NewRequest(http.MethodPut, "/clients/1", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPut, "/api/clients/1", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -199,7 +199,7 @@ func TestErrors(t *testing.T) {
 		"quota": []string{"1000000000"},
 	}
 
-	request = httptest.NewRequest(http.MethodPut, "/clients", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodPut, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -213,7 +213,7 @@ func TestErrors(t *testing.T) {
 		"id": []string{"1"},
 	}
 
-	request = httptest.NewRequest(http.MethodDelete, "/clients/1", strings.NewReader(body.Encode()))
+	request = httptest.NewRequest(http.MethodDelete, "/api/clients/1", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -223,7 +223,7 @@ func TestErrors(t *testing.T) {
 		t.Errorf("Want status '%d', got '%d'", http.StatusForbidden, responseRecorder.Result().StatusCode)
 	}
 
-	request = httptest.NewRequest(http.MethodDelete, "/login", nil)
+	request = httptest.NewRequest(http.MethodDelete, "/api/login", nil)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Add("Authorization", "Basic h"+baseAuthEnc)
 	responseRecorder = httptest.NewRecorder()
@@ -262,7 +262,7 @@ func TestCreateClient(t *testing.T) {
 
 		location := responseRecorder.Header().Get("Location")
 
-		u, err := url.Parse(fmt.Sprintf("/clients/%d", client.ID))
+		u, err := url.Parse(fmt.Sprintf("/api/clients/%d", client.ID))
 		if err != nil {
 			t.Errorf("expected error to be nil, got %v", err)
 		}
@@ -463,7 +463,7 @@ func TestGetAllClients(t *testing.T) {
 	app.initialize(testDatabase)
 	createClient(t)
 
-	request := httptest.NewRequest(http.MethodDelete, "/clients", nil)
+	request := httptest.NewRequest(http.MethodDelete, "/api/clients", nil)
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
@@ -497,7 +497,7 @@ func TestGetClient(t *testing.T) {
 		"id": "1",
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/clients", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/clients", nil)
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
@@ -566,7 +566,7 @@ func TestUpdateClient(t *testing.T) {
 		"quota": []string{"100000000"},
 	}
 
-	request := httptest.NewRequest(http.MethodPut, "/clients", strings.NewReader(body.Encode()))
+	request := httptest.NewRequest(http.MethodPut, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
@@ -605,7 +605,7 @@ func TestDeleteClient(t *testing.T) {
 	app.initialize(testDatabase)
 	createClient(t)
 
-	request := httptest.NewRequest(http.MethodDelete, "/clients/1", nil)
+	request := httptest.NewRequest(http.MethodDelete, "/api/clients/1", nil)
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
@@ -691,17 +691,20 @@ func createClient(t *testing.T) httptest.ResponseRecorder {
 		"quota": []string{"1000000000"},
 	}
 
-	request := httptest.NewRequest(http.MethodPost, "/clients", strings.NewReader(body.Encode()))
+	request := httptest.NewRequest(http.MethodPost, "/api/clients", strings.NewReader(body.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder := httptest.NewRecorder()
 	app.createClient(responseRecorder, request)
+
 	var clients []Client
 	app.DB.Find(&clients)
 
-	newClient = &clients[len(clients)-1]
+	if len(clients) > 0 {
+		newClient = &clients[len(clients)-1]
+	}
 
 	return *responseRecorder
 }

@@ -35,7 +35,7 @@ func Exist(file string) bool {
 }
 
 func ParseClientURL(clientId uint) (*url.URL, error) {
-	return url.Parse(fmt.Sprintf("/clients/%d", clientId))
+	return url.Parse(fmt.Sprintf("/api/clients/%d", clientId))
 }
 
 func LogRequest(r *http.Request) string {
