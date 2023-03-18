@@ -20,11 +20,8 @@ export DATABASE_NAME=test.db
 PASSWORD_HASH=$(htpasswd -bnBC 14 "" $ADMIN_PASSWORD | tr -d ':\n' | sed 's/$2y/$2a/')
 TEST_CLIENT=testuser
 
-# get correct path of script folder
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
 # build knoxite server
-go build $SCRIPT_DIR/cmd/server
+go build ./cmd/server
 
 # setup knoxite server
 ./knoxite-server setup -d $DATABASE_NAME -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -P $ADMIN_PORT -s $STORAGES -C $SERVER_CONFIG
