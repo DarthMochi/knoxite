@@ -27,10 +27,10 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 go build $SCRIPT_DIR/cmd/server
 
 # setup knoxite server
-./server setup -d $DATABASE_NAME -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -P $ADMIN_PORT -s $STORAGES -C $SERVER_CONFIG
+./knoxite-server setup -d $DATABASE_NAME -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -P $ADMIN_PORT -s $STORAGES -C $SERVER_CONFIG
 
 # serve knoxite server in background
-./server serve -C $SERVER_CONFIG &
+./knoxite-server serve -C $SERVER_CONFIG &
 
 # wait for knoxite server to boot up
 sleep 2
