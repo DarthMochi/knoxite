@@ -36,10 +36,10 @@ sleep 2
 USER_AUTH=$(echo -n "$ADMIN_USERNAME:$PASSWORD_HASH" | base64 | tr -d "\n")
 
 # create test client
-curl -H "Authorization: Basic $USER_AUTH" -H "Content-Type: application/x-www-form-urlencoded" -X POST "http://localhost:$ADMIN_PORT/clients" -d "name=$TEST_CLIENT&quota=100000000"
+curl -H "Authorization: Basic $USER_AUTH" -H "Content-Type: application/x-www-form-urlencoded" -X POST "http://localhost:$ADMIN_PORT/api/clients" -d "name=$TEST_CLIENT&quota=100000000"
 
 # retrieve client info of testuser
-JSON=$(curl -H "Authorization: Basic $USER_AUTH" http://localhost:$ADMIN_PORT/clients/1 -s)
+JSON=$(curl -H "Authorization: Basic $USER_AUTH" http://localhost:$ADMIN_PORT/api/clients/1 -s)
 
 # retrieve client auth_code
 AUTH_CODE=$(echo $JSON | jq -r '.AuthCode')
