@@ -30,8 +30,8 @@ var (
 )
 
 func TestErrors(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -235,8 +235,8 @@ func TestErrors(t *testing.T) {
 }
 
 func TestCreateClient(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -279,8 +279,8 @@ func TestCreateClient(t *testing.T) {
 }
 
 func TestUpload(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -296,8 +296,8 @@ func TestUpload(t *testing.T) {
 }
 
 func TestDownload(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -317,8 +317,8 @@ func TestDownload(t *testing.T) {
 }
 
 func TestStat(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -344,8 +344,8 @@ func TestStat(t *testing.T) {
 }
 
 func TestMkdir(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -362,8 +362,8 @@ func TestMkdir(t *testing.T) {
 }
 
 func TestDeleteFile(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -383,8 +383,8 @@ func TestDeleteFile(t *testing.T) {
 }
 
 func TestFilePathTraversal(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -455,8 +455,8 @@ func TestFilePathTraversal(t *testing.T) {
 }
 
 func TestGetAllClients(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -485,8 +485,8 @@ func TestGetAllClients(t *testing.T) {
 }
 
 func TestGetClient(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -520,8 +520,8 @@ func TestGetClient(t *testing.T) {
 }
 
 func TestGetClientByAuthCode(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -553,8 +553,8 @@ func TestGetClientByAuthCode(t *testing.T) {
 }
 
 func TestUpdateClient(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -597,8 +597,8 @@ func TestUpdateClient(t *testing.T) {
 }
 
 func TestDeleteClient(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}
@@ -630,8 +630,8 @@ func TestDeleteClient(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}

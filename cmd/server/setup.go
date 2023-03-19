@@ -143,11 +143,11 @@ func init() {
 	setupCmd.PersistentFlags().BoolVarP(&cfg.UseHostname, "usehostname", "n", true, "Use hostname and dns, default=true")
 	setupCmd.PersistentFlags().BoolVarP(&cfg.UseHTTPS, "usehttps", "S", true, "Use https, default=true")
 
-	setupCmd.MarkFlagRequired("password")
-	setupCmd.MarkFlagRequired("username")
-	setupCmd.MarkFlagRequired("dbfilename")
-	setupCmd.MarkFlagRequired("port")
-	setupCmd.MarkFlagRequired("repopath")
+	setupCmd.MarkFlagRequired("password")   //nolint:errcheck
+	setupCmd.MarkFlagRequired("username")   //nolint:errcheck
+	setupCmd.MarkFlagRequired("dbfilename") //nolint:errcheck
+	setupCmd.MarkFlagRequired("port")       //nolint:errcheck
+	setupCmd.MarkFlagRequired("repopath")   //nolint:errcheck
 
 	RootCmd.AddCommand(setupCmd)
 }
@@ -175,7 +175,7 @@ func initHostname() error {
 	return nil
 }
 
-// Note: the repoURL, since it is a folder, needs to end with a "/", e.g. /tmp/repositories/
+// Note: the repoURL, since it is a folder, needs to end with a "/", e.g. /tmp/repositories/.
 func initStoragePath(storageURL string) error {
 	path, err := utils.PathToUrl(storageURL)
 	if err != nil {
@@ -257,10 +257,13 @@ func initCerts() error {
 
 	// pem encode
 	caPEM := new(bytes.Buffer)
-	pem.Encode(caPEM, &pem.Block{
+	err = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
 	})
+	if err != nil {
+		return err
+	}
 
 	f, err := os.OpenFile(filepath.Join(certsPath, "knoxite-server-ca-cert.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
@@ -274,10 +277,13 @@ func initCerts() error {
 	}
 
 	caPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(caPrivKeyPEM, &pem.Block{
+	err = pem.Encode(caPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
 	})
+	if err != nil {
+		return err
+	}
 
 	f, err = os.OpenFile(filepath.Join(certsPath, "knoxite-server-ca-key.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
@@ -321,10 +327,13 @@ func initCerts() error {
 	}
 
 	certPEM := new(bytes.Buffer)
-	pem.Encode(certPEM, &pem.Block{
+	err = pem.Encode(certPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
 	})
+	if err != nil {
+		return err
+	}
 	f, err = os.OpenFile(filepath.Join(certsPath, "knoxite-server-cert.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -337,10 +346,13 @@ func initCerts() error {
 	}
 
 	certPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(certPrivKeyPEM, &pem.Block{
+	err = pem.Encode(certPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
+	if err != nil {
+		return err
+	}
 	f, err = os.OpenFile(filepath.Join(certsPath, "knoxite-server-key.pem"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err

@@ -4,16 +4,17 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,8 +27,6 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
-
-const timeFormat = "2006-01-02 15:04:05"
 
 type App struct {
 	DB *gorm.DB
@@ -42,10 +41,6 @@ type ServerConfig struct {
 	Port         string
 	Hostname     string
 	ServerScheme string
-}
-
-func redirectToTls(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "https://"+r.Host+r.URL.String(), http.StatusMovedPermanently)
 }
 
 func makeHTTPServer(handler http.Handler, port string) *http.Server {
@@ -68,7 +63,7 @@ func (a *App) initialize(dbURI string) error {
 }
 
 func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -100,7 +95,7 @@ func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) getAllClients(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -115,11 +110,13 @@ func (a *App) getAllClients(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:8080")
 	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(clientsJSON))
+	if _, err := w.Write(clientsJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) getClient(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -132,11 +129,13 @@ func (a *App) getClient(w http.ResponseWriter, r *http.Request) {
 	clientJSON, _ := json.Marshal(client)
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(clientJSON))
+	if _, err := w.Write(clientJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) getClientByName(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -149,11 +148,13 @@ func (a *App) getClientByName(w http.ResponseWriter, r *http.Request) {
 	clientJSON, _ := json.Marshal(client)
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(clientJSON))
+	if _, err := w.Write(clientJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -179,7 +180,7 @@ func (a *App) updateClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) deleteClient(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -196,7 +197,7 @@ func (a *App) deleteClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) login(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -205,7 +206,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) totalAvailableSpace(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -225,11 +226,13 @@ func (a *App) totalAvailableSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(sizeJSON))
+	if _, err := w.Write(sizeJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) totalAvailableSpaceMinusQuota(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -249,11 +252,13 @@ func (a *App) totalAvailableSpaceMinusQuota(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(sizeJSON))
+	if _, err := w.Write(sizeJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) totalAvailableSpacePlusQuota(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -278,11 +283,13 @@ func (a *App) totalAvailableSpacePlusQuota(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(sizeJSON))
+	if _, err := w.Write(sizeJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) totalUsedSpace(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -302,17 +309,24 @@ func (a *App) totalUsedSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(sizeJSON))
+	if _, err := w.Write(sizeJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) totalOccupiedQuota(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	size := a.TotalQuota()
+	size, err := a.TotalQuota()
+	if err != nil {
+		WarningLogger.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	sizeJSON, err := json.Marshal(size)
 	if err != nil {
 		WarningLogger.Println(err)
@@ -320,11 +334,13 @@ func (a *App) totalOccupiedQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(sizeJSON))
+	if _, err := w.Write(sizeJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) configurationInformation(w http.ResponseWriter, r *http.Request) {
-	if err := a.authenticateUser(w, r); err != nil {
+	if err := a.authenticateUser(r); err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -348,11 +364,9 @@ func (a *App) configurationInformation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(configJSON))
-}
-
-func (a *App) enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+	if _, err := w.Write(configJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
@@ -468,12 +482,15 @@ var (
 			// }
 			router.Use(loggingMiddleware)
 			http.Handle("/", router)
-			router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+			err = router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
 				tpl, err1 := route.GetPathTemplate()
 				met, err2 := route.GetMethods()
 				InfoLogger.Println(tpl, err1, met, err2)
 				return nil
 			})
+			if err != nil {
+				InfoLogger.Println(err)
+			}
 
 			if cfg.UseHTTPS {
 				certPem := filepath.Join(certsPath, "knoxite-server-cert.pem")
@@ -537,7 +554,7 @@ func init() {
 }
 
 func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
+	client, err := a.authenticateClient(r)
 	if err != nil {
 		WarningLogger.Println(errNoAuth)
 		w.WriteHeader(http.StatusForbidden)
@@ -546,10 +563,12 @@ func (a *App) getClientByAuthCode(w http.ResponseWriter, r *http.Request) {
 
 	clientJSON, _ := json.Marshal(client)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(clientJSON))
+	if _, err := w.Write(clientJSON); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
-func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Client, error) {
+func (a *App) authenticateClient(r *http.Request) (*Client, error) {
 	authTokenHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
 
 	if len(authTokenHeader) < 2 {
@@ -567,7 +586,7 @@ func (a *App) authenticateClient(w http.ResponseWriter, r *http.Request) (*Clien
 	return client, nil
 }
 
-func (a *App) authenticateUser(w http.ResponseWriter, r *http.Request) error {
+func (a *App) authenticateUser(r *http.Request) error {
 	u, p, ok := r.BasicAuth()
 
 	if !ok {
@@ -585,7 +604,7 @@ func (a *App) authenticateUser(w http.ResponseWriter, r *http.Request) error {
 
 // upload logic.
 func (a *App) upload(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
+	client, err := a.authenticateClient(r)
 
 	if r.Method != "POST" || err != nil {
 		WarningLogger.Println(errInvalidURL)
@@ -610,7 +629,6 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	fileContent := r.FormValue("uploadfile")
 	diff, err := a.UploadFile(*client, urlPath, fileContent)
 	if err != nil {
-
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -622,7 +640,9 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(filestat)
+	if err := json.NewEncoder(w).Encode(filestat); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) UploadFile(client Client, filePath string, fileContent string) (int64, error) {
@@ -656,7 +676,11 @@ func (a *App) UploadFile(client Client, filePath string, fileContent string) (in
 	}
 
 	buf := make([]byte, fileinfo.Size())
-	f.Read(buf)
+	_, err = f.Read(buf)
+	if err != nil {
+		WarningLogger.Println(err)
+		return 0, err
+	}
 	diff := utils.ByteArrDiff(buf, []byte(fileContent))
 	if diff == 0 {
 		return diff, nil
@@ -679,26 +703,28 @@ func (a *App) UploadFile(client Client, filePath string, fileContent string) (in
 }
 
 func (a *App) downloadCert(w http.ResponseWriter, r *http.Request) {
-	_, err := a.authenticateClient(w, r)
+	_, err := a.authenticateClient(r)
 
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	data, err := ioutil.ReadFile(filepath.Join(certsPath, "knoxite-server-cert.pem"))
+	data, err := os.ReadFile(filepath.Join(certsPath, "knoxite-server-cert.pem"))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 // download logic.
 func (a *App) download(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
+	client, err := a.authenticateClient(r)
 
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -717,7 +743,9 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (a *App) DownloadFile(client Client, filePath string) ([]byte, error) {
@@ -742,7 +770,7 @@ func (a *App) DownloadFile(client Client, filePath string) ([]byte, error) {
 }
 
 func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
+	client, err := a.authenticateClient(r)
 	if err != nil {
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -766,7 +794,9 @@ func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(jData))
+	if _, err := w.Write(jData); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func stat(client Client, filePath string) (FileStat, error) {
@@ -789,7 +819,7 @@ func stat(client Client, filePath string) (FileStat, error) {
 }
 
 func (a *App) mkdir(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
+	client, err := a.authenticateClient(r)
 	if err != nil {
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -827,7 +857,7 @@ func mkDir(client Client, dirPath string) error {
 }
 
 func (a *App) delete(w http.ResponseWriter, r *http.Request) {
-	client, err := a.authenticateClient(w, r)
+	client, err := a.authenticateClient(r)
 	if err != nil {
 		w.WriteHeader(http.StatusForbidden)
 		return
@@ -895,7 +925,12 @@ func (a *App) AvailableSpaceMinusQuota() (uint64, error) {
 		return 0, err
 	}
 
-	return space - a.TotalQuota(), nil
+	total_quota, err := a.TotalQuota()
+	if err != nil {
+		return 0, err
+	}
+
+	return space - total_quota, nil
 }
 
 func (a *App) AvailableSpace() (uint64, error) {
@@ -908,16 +943,26 @@ func (a *App) AvailableSpace() (uint64, error) {
 	return space, nil
 }
 
-func (a *App) TotalQuota() uint64 {
-	var totalQuota uint64
-	a.DB.Table("clients").Select("sum(quota)").Row().Scan(&totalQuota)
+func (a *App) TotalQuota() (uint64, error) {
+	var totalQuota sql.NullString
+	if err := a.DB.Table("clients").Select("sum(quota)").Row().Scan(&totalQuota); err != nil {
+		return 0, err
+	}
 
-	return totalQuota
+	var quota uint64
+	quota, err := strconv.ParseUint(totalQuota.String, 10, 64)
+	if err != nil {
+		return 0, nil
+	}
+
+	return quota, nil
 }
 
 func (a *App) UsedSpace() (uint64, error) {
 	var usedSpace uint64
-	a.DB.Table("clients").Select("sum(used_space)").Row().Scan(&usedSpace)
+	if err := a.DB.Table("clients").Select("sum(used_space)").Row().Scan(&usedSpace); err != nil {
+		return 0, err
+	}
 
 	return usedSpace, nil
 }

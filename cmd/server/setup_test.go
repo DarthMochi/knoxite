@@ -18,8 +18,8 @@ var (
 )
 
 func Test_ExecuteCommand(t *testing.T) {
-	err := setupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
-	defer cleanup(testDatabase, testStorage, testConfig)
+	err := SetupServer(testUsername, testPassword, testDatabase, testStorage, testPort, testConfig)
+	defer Cleanup(testDatabase, testStorage, testConfig)
 	if err != nil {
 		t.Errorf("expected error to be nil, got %v", err)
 	}

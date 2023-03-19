@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -124,7 +123,7 @@ func (backend *HTTPStorage) getHTTPSClient() *http.Client {
 	var cert []byte
 	tlsConfig := &tls.Config{
 		RootCAs:            x509.NewCertPool(),
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: true, //nolint:gosec
 	}
 	transport := &http.Transport{TLSClientConfig: tlsConfig}
 	client := &http.Client{
@@ -158,11 +157,11 @@ func (backend *HTTPStorage) getHTTPSClient() *http.Client {
 			return nil
 		}
 
-		if err = ioutil.WriteFile(certPath, cert, 0600); err != nil {
+		if err = os.WriteFile(certPath, cert, 0600); err != nil {
 			return nil
 		}
 	} else {
-		cert, err = ioutil.ReadFile(certPath)
+		cert, err = os.ReadFile(certPath)
 		if err != nil {
 			return nil
 		}
@@ -198,10 +197,11 @@ func (backend *HTTPStorage) CreatePath(path string) error {
 		return knoxite.ErrInvalidRepositoryURL
 	}
 	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
-	_, err = httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	return nil
 }
@@ -303,10 +303,11 @@ func (backend *HTTPStorage) DeleteFile(path string) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+backend.url.User.Username())
 	req.Header.Set("Path", path)
-	_, err = httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	return nil
 }
@@ -335,7 +336,6 @@ func (backend *HTTPStorage) GetClientInfo() (BackendClient, error) {
 
 // LoadChunkIndex reads the chunk-index.
 func (backend *HTTPStorage) LoadChunkIndex() ([]byte, error) {
-
 	var httpClient = backend.getHTTPClient()
 
 	req, err := http.NewRequest(http.MethodGet, backend.url.String()+"/download/chunks/index", nil)

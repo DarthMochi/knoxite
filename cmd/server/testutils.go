@@ -1,11 +1,13 @@
 //go:build windows || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
 // +build windows darwin dragonfly freebsd linux netbsd openbsd solaris
 
+// +test windows darwin dragonfly freebsd linux netbsd openbsd solaris
+
 package main
 
 import "os"
 
-func setupServer(username string, password string, database string, storage string, port string, testConfig string) error {
+func SetupServer(username string, password string, database string, storage string, port string, testConfig string) error {
 	RootCmd.SetArgs([]string{
 		"setup",
 		"-u", username,
@@ -23,7 +25,7 @@ func setupServer(username string, password string, database string, storage stri
 	return nil
 }
 
-func cleanup(database string, storage string, testConfig string) {
+func Cleanup(database string, storage string, testConfig string) {
 	os.Remove(database)
 	os.RemoveAll(storage)
 	os.Remove(testConfig)
