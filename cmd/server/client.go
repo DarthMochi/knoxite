@@ -105,9 +105,9 @@ func (a *App) UpdateClient(clientId string, name string, quotaString string) err
 		return errInvalidURL
 	}
 
-	storagePath := filepath.Join("/", cfg.StoragesPath, client.Name)
+	storagePath := filepath.Join(cfg.StoragesPath, client.Name)
 	if !utils.Exist(storagePath) {
-		err = os.Rename(filepath.Join("/", cfg.StoragesPath, oldName), filepath.Join("/", cfg.StoragesPath, client.Name))
+		err = os.Rename(filepath.Join(cfg.StoragesPath, oldName), filepath.Join(cfg.StoragesPath, client.Name))
 		if err != nil {
 			WarningLogger.Println(err)
 			return err

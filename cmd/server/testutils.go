@@ -5,7 +5,12 @@
 
 package main
 
-import "os"
+import (
+	"os"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+)
 
 func SetupServer(username string, password string, database string, storage string, port string, testConfig string) error {
 	RootCmd.SetArgs([]string{
@@ -26,7 +31,8 @@ func SetupServer(username string, password string, database string, storage stri
 }
 
 func Cleanup(database string, storage string, testConfig string) {
-	os.Remove(database)
+	db, _ := gorm.Open(sqlite.Open(database))
+	db.Migrator().DropTable(&Client{})
 	os.RemoveAll(storage)
 	os.Remove(testConfig)
 }

@@ -18,13 +18,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/gorilla/mux"
 	"github.com/knoxite/knoxite/cmd/server/config"
 	"github.com/knoxite/knoxite/cmd/server/utils"
 	"github.com/miekg/dns"
 	"github.com/rs/cors"
 	"github.com/spf13/cobra"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -59,8 +59,21 @@ func (a *App) initialize(dbURI string) error {
 		return err
 	}
 	a.DB = db
+
 	return nil
 }
+
+// func (a *App) finalize() error {
+// 	dB, err := a.DB
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if err := dB.Close(); err != nil {
+// 		return err
+// 	}
+
+// 	return nil
+// }
 
 func (a *App) createClient(w http.ResponseWriter, r *http.Request) {
 	if err := a.authenticateUser(r); err != nil {
@@ -646,13 +659,12 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) UploadFile(client Client, filePath string, fileContent string) (int64, error) {
-	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
-	if err != nil || strings.Contains(filePath, "..") {
+	if strings.Contains(filePath, "..") {
 		WarningLogger.Println(errInvalidURL)
 		return 0, errInvalidURL
 	}
-	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
-	if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	path := filepath.Join(cfg.StoragesPath, client.Name, filepath.Join(filePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		WarningLogger.Println(errNoSpace)
 		return 0, err
 	}
@@ -749,12 +761,11 @@ func (a *App) download(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) DownloadFile(client Client, filePath string) ([]byte, error) {
-	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
-	if err != nil || strings.Contains(filePath, "..") {
+	if strings.Contains(filePath, "..") {
 		WarningLogger.Println(errInvalidURL)
 		return nil, errInvalidURL
 	}
-	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
+	path := filepath.Join(cfg.StoragesPath, client.Name, filepath.Join(filePath))
 	if !utils.Exist(path) {
 		WarningLogger.Println(errNoPath)
 		return nil, errNoPath
@@ -800,13 +811,12 @@ func (a *App) getFileStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func stat(client Client, filePath string) (FileStat, error) {
-	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
-	if err != nil || strings.Contains(filePath, "..") {
+	if strings.Contains(filePath, "..") {
 		WarningLogger.Println(errInvalidURL)
 		return FileStat{}, errInvalidURL
 	}
 	var file FileStat
-	file.Path = filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
+	file.Path = filepath.Join(cfg.StoragesPath, client.Name, filepath.Join(filePath))
 
 	osFile, err := os.Stat(file.Path)
 	if err != nil {
@@ -839,13 +849,12 @@ func (a *App) mkdir(w http.ResponseWriter, r *http.Request) {
 }
 
 func mkDir(client Client, dirPath string) error {
-	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", dirPath))
-	if err != nil || strings.Contains(dirPath, "..") {
+	if strings.Contains(dirPath, "..") {
 		WarningLogger.Println(errInvalidURL)
 		return errInvalidURL
 	}
-	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", dirPath))
 
+	path := filepath.Join(cfg.StoragesPath, client.Name, filepath.Join(dirPath))
 	if !utils.Exist(path) {
 		if err := os.MkdirAll(path, 0755); err != nil {
 			WarningLogger.Println(err)
@@ -879,13 +888,11 @@ func (a *App) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) DeleteFile(client Client, filePath string) error {
-	_, err := filepath.Rel(filepath.Join("/", cfg.StoragesPath, client.Name), filepath.Join("/", filePath))
-	if err != nil || strings.Contains(filePath, "..") {
+	if strings.Contains(filePath, "..") {
 		WarningLogger.Println(errInvalidURL)
 		return errInvalidURL
 	}
-	path := filepath.Join("/", cfg.StoragesPath, client.Name, filepath.Join("/", filePath))
-
+	path := filepath.Join(cfg.StoragesPath, client.Name, filepath.Join(filePath))
 	stats, err := os.Stat(path)
 	if err != nil {
 		WarningLogger.Println(err)

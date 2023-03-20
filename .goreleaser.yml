@@ -4,6 +4,12 @@ before:
   hooks:
   - go mod download
 builds:
+  - env:
+      - CGO_ENABLED=1
+    goarch:
+      - amd64
+    goos:
+      - windows
   -
     id: knoxite
     binary: knoxite

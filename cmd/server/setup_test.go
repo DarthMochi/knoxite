@@ -5,16 +5,17 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 var (
 	testUsername = "abc"
 	testPassword = "123"
-	testDatabase = "test.db"
-	testStorage  = "testdata/repositories/"
+	testDatabase = filepath.Join(".", "test.db")
+	testStorage  = filepath.Join(".", "testdata", "repositories")
 	testPort     = "8080"
-	testConfig   = "testdata/knoxite-server.config"
+	testConfig   = filepath.Join(".", "testdata", "knoxite-server.config")
 )
 
 func Test_ExecuteCommand(t *testing.T) {

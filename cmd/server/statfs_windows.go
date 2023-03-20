@@ -7,15 +7,17 @@ package main
 import (
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 func (statOS *StatOS) GetAvailableStorageSpace() (uint64, error) {
 	h := syscall.NewLazyDLL("kernel32.dll")
-	c := h.NewProc("GetPhysicallyInstalledSystemMemory")
+	c := h.NewProc("GetDiskFreeSpaceExW")
 	var freeBytes uint64
 
-	_, _, err := c.Call(uintptr(unsafe.Pointer(&freeBytes)))
-	if err != nil {
+	cValue, _, err := c.Call(uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(cfg.StoragesPath))), uintptr(unsafe.Pointer(&freeBytes)))
+	if cValue != 1 && err != nil {
 		return 0, err
 	}
 

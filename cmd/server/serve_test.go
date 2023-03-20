@@ -327,7 +327,7 @@ func TestStat(t *testing.T) {
 	testfile := "loremipsum"
 	uploadTestFileRequest(t, testfile)
 
-	request := httptest.NewRequest(http.MethodGet, "/size/chunks/", strings.NewReader(testfile))
+	request := httptest.NewRequest(http.MethodGet, "/size/chunks/loremipsum", nil)
 	request.Header.Set("Authorization", "Bearer "+newClient.AuthCode)
 	responseRecorder := httptest.NewRecorder()
 	app.getFileStats(responseRecorder, request)
@@ -497,13 +497,14 @@ func TestGetClient(t *testing.T) {
 		"id": "1",
 	}
 
-	request := httptest.NewRequest(http.MethodGet, "/api/clients", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/clients/1", nil)
 	hash, _ := utils.HashPassword(testPassword)
 	baseAuthEnc := b64.StdEncoding.EncodeToString([]byte(testUsername + ":" + hash))
 	request.Header.Add("Authorization", "Basic "+baseAuthEnc)
 	responseRecorder := httptest.NewRecorder()
 	request = mux.SetURLVars(request, body)
 	app.getClient(responseRecorder, request)
+
 	if responseRecorder.Result().StatusCode != http.StatusOK {
 		t.Errorf("Want status '%d', got '%d'", http.StatusOK, responseRecorder.Code)
 	}

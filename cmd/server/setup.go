@@ -18,12 +18,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/knoxite/knoxite/cmd/server/config"
 	"github.com/knoxite/knoxite/cmd/server/utils"
 	gap "github.com/muesli/go-app-paths"
 	"github.com/natefinch/lumberjack"
 	"github.com/spf13/cobra"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
