@@ -28,6 +28,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const timeFormat = "2006-01-02 15:04:05"
+
 type App struct {
 	DB *gorm.DB
 }
@@ -642,6 +644,7 @@ func (a *App) upload(w http.ResponseWriter, r *http.Request) {
 	fileContent := r.FormValue("uploadfile")
 	diff, err := a.UploadFile(*client, urlPath, fileContent)
 	if err != nil {
+
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -966,9 +969,15 @@ func (a *App) TotalQuota() (uint64, error) {
 }
 
 func (a *App) UsedSpace() (uint64, error) {
-	var usedSpace uint64
-	if err := a.DB.Table("clients").Select("sum(used_space)").Row().Scan(&usedSpace); err != nil {
+	var usedSpaceSum sql.NullString
+	if err := a.DB.Table("clients").Select("sum(used_space)").Row().Scan(&usedSpaceSum); err != nil {
 		return 0, err
+	}
+
+	var usedSpace uint64
+	usedSpace, err := strconv.ParseUint(usedSpaceSum.String, 10, 64)
+	if err != nil {
+		return 0, nil
 	}
 
 	return usedSpace, nil
